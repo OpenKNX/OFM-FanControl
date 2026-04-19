@@ -99,84 +99,9 @@
               <ComObjectRef Id="%AID%_O-%TT%%CC%020_R-%TT%%CC%02001" RefId="%AID%_O-%TT%%CC%020" Text="{{0:Lüfter %C%}}: Vollsteuerung Geschwindigkeit Rückmeldung" FunctionText="Lüfter %C%: Ausgang, 0-100%" TextParameterRefId="%AID%_P-%TT%%CC%101_R-%TT%%CC%10101"/>
             </ComObjectRefs>
           </Static>
-          <!-- Here starts the UI definition -->
+          <!-- Dynamic section is in Fan.share.xml (manual per-channel for conditional visibility) -->
           <Dynamic>
-            <ChannelIndependentBlock>
-              <ParameterBlock Id="%AID%_PB-%CC%" Name="FanCHSettings" Text="{{0: Lüfter %C%}}" Icon="fan-speed-%C%" TextParameterRefId="%AID%_P-%TT%%CC%101_R-%TT%%CC%10101" ShowInComObjectTree="true">
-                <ParameterRefRef RefId="%AID%_P-%TT%%CC%101_R-%TT%%CC%10101" /> <!-- Lüftername -->
-
-                <ParameterRefRef RefId="%AID%_P-%TT%%CC%001_R-%TT%%CC%00101" HelpContext="FAN-Betriebsmodus" /> <!-- Betriebsmodus -->
-                <choose ParamRefId="%AID%_P-%TT%%CC%001_R-%TT%%CC%00101">
-                  <when test="!=0"> <!-- Betriebsmodus != Aus -->
-                    <ParameterRefRef RefId="%AID%_P-%TT%%CC%004_R-%TT%%CC%00401" HelpContext="FAN-Lueftungsmodus-Manuell" /> <!-- Lüftungsmodus -->
-                    <ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /> <!-- Stufe -->
-                    <ComObjectRefRef RefId="%AID%_O-%TT%%CC%006_R-%TT%%CC%00601" /> <!-- Stufe erhöhen / reduzieren -->
-                    <ComObjectRefRef RefId="%AID%_O-%TT%%CC%007_R-%TT%%CC%00701" /> <!-- Stufe Feedback -->
-                    <ComObjectRefRef RefId="%AID%_O-%TT%%CC%012_R-%TT%%CC%01201" /> <!-- Timer aktivieren -->
-                    <ComObjectRefRef RefId="%AID%_O-%TT%%CC%013_R-%TT%%CC%01301" /> <!-- Timerfeedback -->
-                    <ComObjectRefRef RefId="%AID%_O-%TT%%CC%016_R-%TT%%CC%01601" /> <!-- Drehzahl RPM -->
-                    <choose ParamRefId="%AID%_P-%TT%%CC%004_R-%TT%%CC%00401">
-                      <when test="3">
-                        <ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /> <!-- KO Lüftungsmodus, falls Auswahl durch KO selektiert -->
-                        <ComObjectRefRef RefId="%AID%_O-%TT%%CC%011_R-%TT%%CC%01101" /> <!-- KO Lüftungsmodus Feedback-->
-                      </when>
-                    </choose>
-                  </when>
-                  <when test="3">
-                    <ComObjectRefRef RefId="%AID%_O-%TT%%CC%008_R-%TT%%CC%00801" /> <!-- KO Betriebsmodus (0=Manuell/1=Automatik/2=Vollsteuerung) -->
-                    <ComObjectRefRef RefId="%AID%_O-%TT%%CC%009_R-%TT%%CC%00901" /> <!-- KO Betriebsmodus Feedback-->
-                    <ComObjectRefRef RefId="%AID%_O-%TT%%CC%017_R-%TT%%CC%01701" /> <!-- Vollsteuerung Ein/Aus -->
-                    <ComObjectRefRef RefId="%AID%_O-%TT%%CC%018_R-%TT%%CC%01801" /> <!-- Vollsteuerung Geschwindigkeit -->
-                    <ComObjectRefRef RefId="%AID%_O-%TT%%CC%019_R-%TT%%CC%01901" /> <!-- Vollsteuerung Drehrichtung -->
-                    <ComObjectRefRef RefId="%AID%_O-%TT%%CC%020_R-%TT%%CC%02001" /> <!-- Vollsteuerung Geschwindigkeit Feedback -->
-                  </when>
-                  <when test="4"> <!-- Vollsteuerung -->
-                    <ComObjectRefRef RefId="%AID%_O-%TT%%CC%017_R-%TT%%CC%01701" /> <!-- Vollsteuerung Ein/Aus -->
-                    <ComObjectRefRef RefId="%AID%_O-%TT%%CC%018_R-%TT%%CC%01801" /> <!-- Vollsteuerung Geschwindigkeit -->
-                    <ComObjectRefRef RefId="%AID%_O-%TT%%CC%019_R-%TT%%CC%01901" /> <!-- Vollsteuerung Drehrichtung -->
-                    <ComObjectRefRef RefId="%AID%_O-%TT%%CC%020_R-%TT%%CC%02001" /> <!-- Vollsteuerung Geschwindigkeit Feedback -->
-                  </when>
-                  <when test="2 3"> <!-- Falls Automatik-Betriebsmodus oder Auswahl durch KO -->
-                    <ParameterSeparator Id="%AID%_PS-nnn" Text="" UIHint="HorizontalRuler" />
-                    <ParameterSeparator Id="%AID%_PS-nnn" Text="Automatikkonfiguration" UIHint="Headline" />
-                    <ParameterRefRef RefId="%AID%_P-%TT%%CC%002_R-%TT%%CC%00201" IndentLevel="1" HelpContext="FAN-Schwellwert-Aktivierung" /> <!-- Schwellwert Luftfeuchtigkeit (Aktivierung) -->
-                    <ParameterRefRef RefId="%AID%_P-%TT%%CC%009_R-%TT%%CC%00901" IndentLevel="1" HelpContext="FAN-Schwellwert-Deaktivierung" /> <!-- Schwellwert Luftfeuchtigkeit (Deaktivierung) -->
-                    <ParameterRefRef RefId="%AID%_P-%TT%%CC%010_R-%TT%%CC%01001" IndentLevel="1" HelpContext="FAN-Lueftungsmodus-Automatik" /> <!-- Lüftungsmodus im Automatikbetrieb -->
-                    <choose ParamRefId="%AID%_P-%TT%%CC%010_R-%TT%%CC%01001">
-                      <when test="3">
-                        <ComObjectRefRef RefId="%AID%_O-%TT%%CC%014_R-%TT%%CC%01401" /> <!-- KO Lüftungsmodus, falls Auswahl durch KO selektiert -->
-                        <ComObjectRefRef RefId="%AID%_O-%TT%%CC%015_R-%TT%%CC%01501" /> <!-- KO Lüftungsmodus Feedback-->
-                      </when>
-                    </choose>
-                    <ParameterRefRef RefId="%AID%_P-%TT%%CC%005_R-%TT%%CC%00501" IndentLevel="1" HelpContext="FAN-Luftfeuchtemessung" /> <!-- Luftfeuchtemessung -->
-                    <ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /> <!-- KO Luftfeuchte innen-->
-                    <choose ParamRefId="%AID%_P-%TT%%CC%005_R-%TT%%CC%00501">
-                      <when test="1">
-                        <ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /> <!-- KO Temp innen, falls Auswahl durch KO selektiert -->
-                        <ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /> <!-- KO Luftfeuchte außen, falls Auswahl durch KO selektiert -->
-                        <ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /> <!-- KO Temperatur außen, falls Auswahl durch KO selektiert -->
-                      </when>
-                    </choose>
-                    <ParameterRefRef RefId="%AID%_P-%TT%%CC%003_R-%TT%%CC%00301" IndentLevel="1" HelpContext="FAN-Steuerungsmodus" /> <!-- Steuerungsmodus -->
-                    <choose ParamRefId="%AID%_P-%TT%%CC%003_R-%TT%%CC%00301"> 
-                      <when test="0">
-                      <ParameterRefRef RefId="%AID%_P-%TT%%CC%008_R-%TT%%CC%00801" IndentLevel="2" HelpContext="FAN-Geschwindigkeit-Grenzwert" /> <!-- Geschwindigkeits im Steuerungsmodus "Grenzwert" -->
-                      </when>
-                    </choose>
-                  </when>
-                  <when test="!=0">  <!-- Betriebsmodus != Aus -->
-                    <ParameterSeparator Id="%AID%_PS-nnn" Text="" UIHint="HorizontalRuler" />
-                    <ParameterSeparator Id="%AID%_PS-nnn" Text="Timerkonfiguration" UIHint="Headline" />
-                    <ParameterRefRef RefId="%AID%_P-%TT%%CC%006_R-%TT%%CC%00601" IndentLevel="1" HelpContext="FAN-Laufzeitauswahl" />
-                    <choose ParamRefId="%AID%_P-%TT%%CC%006_R-%TT%%CC%00601">
-                      <when test="0"> <!-- Wenn Laufzeitauswahl "Manuell" -->
-                        <ParameterRefRef RefId="%AID%_P-%TT%%CC%007_R-%TT%%CC%00701" IndentLevel="1" /> <!-- Laufzeit in Sekunden (manuelle Eingabe) -->
-                      </when>
-                    </choose>
-                  </when>
-                </choose>
-              </ParameterBlock>
-            </ChannelIndependentBlock>
+            <ChannelIndependentBlock />
           </Dynamic>
         </ApplicationProgram>
       </ApplicationPrograms>

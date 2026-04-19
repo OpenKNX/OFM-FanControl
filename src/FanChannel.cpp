@@ -116,7 +116,7 @@ void FanChannel::setHumiditySensorMode(uint8_t humiditySensorModeIdx)
 }
 
 
-void FanChannel::processInputKo(GroupObject& ko) 
+void FanChannel::processInputKo(GroupObject& ko)
 {
     if (!ko.initialized())
         return;

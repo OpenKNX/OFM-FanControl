@@ -16,8 +16,26 @@ void FanModule::setup(bool configured) {
     _fan1Hw.setDigital(STATUS_LED_PIN, false);
   }
 
-  _channel[0] = new FanChannel(0, _fan1);
-  _channel[1] = new FanChannel(1, _fan2);
+  // Read global hardware config: 0=1x Maico PPB30, 1=2x Fawas AirSolitaire
+  uint8_t hwConfig = ParamFAN_HardwareConfig;
+  openknx.logger.logWithPrefixAndValues("FanMod", "HardwareConfig=%d (0=Maico, 1=Fawas)", hwConfig);
+
+  if (hwConfig == 1) {
+    // 2x Fawas AirSolitaire — one fan per HW channel
+    _fan1 = new FawasAirSolitaire(_fan1Hw, FAN1_S1_PWM_PIN, FAN1_SW_PIN);
+    _fan2 = new FawasAirSolitaire(_fan2Hw, FAN2_S1_PWM_PIN, FAN2_SW_PIN);
+  } else {
+    // 1x Maico PPB30 — S1=FAN1_PWM, S2=FAN2_PWM (both HW channels for one push-pull unit)
+    _fan1 = new MaicoPPB30(_fan1Hw, FAN1_S1_PWM_PIN, FAN2_S1_PWM_PIN, FAN1_SW_PIN);
+    // fan2 not used in Maico mode — create dummy with invalid pins
+    _fan2 = new MaicoPPB30(_fan2Hw, FAN2_S1_PWM_PIN, FAN2_S2_PWM_PIN, FAN2_SW_PIN);
+  }
+
+  openknx.logger.logWithPrefixAndValues("FanMod", "Fan1 pins: PWM=%d SW=%d, Fan2 pins: PWM=%d SW=%d",
+    FAN1_S1_PWM_PIN, FAN1_SW_PIN, FAN2_S1_PWM_PIN, FAN2_SW_PIN);
+
+  _channel[0] = new FanChannel(0, *_fan1);
+  _channel[1] = new FanChannel(1, *_fan2);
 
   for (int i = 0; i < FAN_ChannelCount; i++) {
     _channel[i]->setup(configured);

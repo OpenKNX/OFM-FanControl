@@ -86,20 +86,26 @@
                   <!-- 1 bit reserve -->
                 </TypeRestriction>
               </ParameterType>
-              <!-- Parameter type for an 16 bit float value like temperature -->
-              <!-- <ParameterType Id="%AID%_PT-ValueDpt9" Name="ValueDpt9">
-                <TypeFloat Encoding="IEEE-754 Single" minInclusive="-671088" maxInclusive="670760" />
-              </ParameterType> -->
+              <ParameterType Id="%AID%_PT-FanType" Name="FanType">
+                <TypeRestriction Base="Value" SizeInBit="2">
+                  <Enumeration Text="Zwei Lüfter pro Lüftereinheit, z.B. Maico PP B30" Value="0" Id="%AID%_PT-FanType_EN-0" />
+                  <Enumeration Text="Ein Lüfter pro Lüftereinheit, z.B. Fawas AirSolitaire 160" Value="1" Id="%AID%_PT-FanType_EN-1" />
+                </TypeRestriction>
+              </ParameterType>
             </ParameterTypes>
             
             <Parameters>
               <Parameter Id="%AID%_P-%TT%00001" Name="StatusLED" ParameterType="%AID%_PT-StatusLED" Text="Modus Status-LED" Value="0">
                 <Memory CodeSegment="%AID%_RS-04-00000" Offset="0" BitOffset="0" />
               </Parameter>
+              <Parameter Id="%AID%_P-%TT%00002" Name="HardwareConfig" ParameterType="%AID%_PT-FanType" Text="Hardwarekonfiguration" Value="0">
+                <Memory CodeSegment="%AID%_RS-04-00000" Offset="0" BitOffset="3" />
+              </Parameter>
             </Parameters>
 
             <ParameterRefs>
               <ParameterRef Id="%AID%_P-%TT%00001_R-%TT%0000101" RefId="%AID%_P-%TT%00001" />
+              <ParameterRef Id="%AID%_P-%TT%00002_R-%TT%0000201" RefId="%AID%_P-%TT%00002" />
             </ParameterRefs>
 
             <ComObjectTable>
@@ -134,9 +140,188 @@
               <ParameterBlock Id="%AID%_PB-1" Name="General" Icon="information-outline" Text="Allgemein">
                 <ParameterSeparator Id="%AID%_PS-nnn" Text="Lüftermodul" UIHint="Headline" />
                 <ParameterSeparator Id="%AID%_PS-nnn" Text="Version: %ModuleVersion%" />
+                <ParameterRefRef RefId="%AID%_P-%TT%00002_R-%TT%0000201" /> <!-- Hardwarekonfiguration -->
                 <ParameterRefRef RefId="%AID%_P-%TT%00001_R-%TT%0000101" HelpContext="FAN-StatusLED" /> <!-- Status-LED -->
               </ParameterBlock>
-              <op:include href="Fan.templ.xml" xpath="//ApplicationProgram/Dynamic/ChannelIndependentBlock/*" type="template" prefix="FAN" IsInner="true" />
+              <!--
+                ACHTUNG: Hardcodierte Dynamic-Sektion (nicht aus Fan.templ.xml generiert!)
+
+                Hintergrund: Die Dynamic-Sektion wurde manuell für jeden Kanal geschrieben,
+                da das OpenKNXproducer-Template-System (NumChannels, %CC%, %C%) keine
+                kanalabhängige Sichtbarkeit auf Basis eines globalen Parameters unterstützt.
+
+                Das Template generiert identische ParameterBlocks für alle Kanäle — es gibt
+                keine Möglichkeit, innerhalb eines Templates den aktuellen Kanalindex (%C%)
+                in einem choose/when zu testen.
+
+                Lösung: Die Static-Sektion (Parameter, KOs, ParameterRefs, ComObjectRefs)
+                wird weiterhin aus Fan.templ.xml generiert. Die Dynamic-Sektion (UI-Layout
+                mit choose/when Sichtbarkeitslogik) ist hier manuell für Kanal 1 und 2
+                geschrieben. Kanal 2 ist in einen choose auf den globalen Parameter
+                "HardwareConfig" gewrappt, sodass er nur bei "Ein Lüfter pro Einheit"
+                (Fawas-Modus, Wert=1) sichtbar ist.
+
+                Bei Änderungen an den KOs oder Parametern muss diese Sektion für BEIDE
+                Kanäle manuell aktualisiert werden! Die IDs folgen dem Schema:
+                  Kanal 1: %TT%01xxx (z.B. %TT%01001 = CH1_OpMode)
+                  Kanal 2: %TT%02xxx (z.B. %TT%02001 = CH2_OpMode)
+              -->
+
+              <!-- Lüfter 1: immer sichtbar -->
+              <ParameterBlock Id="%AID%_PB-FAN01" Name="Fan1Settings" Text="{{0: Lüfter 1}}" Icon="fan-speed-1" TextParameterRefId="%AID%_P-%TT%01101_R-%TT%0110101" ShowInComObjectTree="true">
+                <ParameterRefRef RefId="%AID%_P-%TT%01101_R-%TT%0110101" />
+                <ParameterRefRef RefId="%AID%_P-%TT%01001_R-%TT%0100101" HelpContext="FAN-Betriebsmodus" />
+                <choose ParamRefId="%AID%_P-%TT%01001_R-%TT%0100101">
+                  <when test="4">
+                    <ComObjectRefRef RefId="%AID%_O-%TT%01016_R-%TT%0101601" />
+                    <ComObjectRefRef RefId="%AID%_O-%TT%01017_R-%TT%0101701" />
+                    <ComObjectRefRef RefId="%AID%_O-%TT%01018_R-%TT%0101801" />
+                    <ComObjectRefRef RefId="%AID%_O-%TT%01019_R-%TT%0101901" />
+                    <ComObjectRefRef RefId="%AID%_O-%TT%01020_R-%TT%0102001" />
+                  </when>
+                  <when test="1 2 3">
+                    <ParameterRefRef RefId="%AID%_P-%TT%01004_R-%TT%0100401" HelpContext="FAN-Lueftungsmodus-Manuell" />
+                    <ComObjectRefRef RefId="%AID%_O-%TT%01005_R-%TT%0100501" />
+                    <ComObjectRefRef RefId="%AID%_O-%TT%01006_R-%TT%0100601" />
+                    <ComObjectRefRef RefId="%AID%_O-%TT%01007_R-%TT%0100701" />
+                    <ComObjectRefRef RefId="%AID%_O-%TT%01012_R-%TT%0101201" />
+                    <ComObjectRefRef RefId="%AID%_O-%TT%01013_R-%TT%0101301" />
+                    <ComObjectRefRef RefId="%AID%_O-%TT%01016_R-%TT%0101601" />
+                    <choose ParamRefId="%AID%_P-%TT%01004_R-%TT%0100401">
+                      <when test="3">
+                        <ComObjectRefRef RefId="%AID%_O-%TT%01010_R-%TT%0101001" />
+                        <ComObjectRefRef RefId="%AID%_O-%TT%01011_R-%TT%0101101" />
+                      </when>
+                    </choose>
+                  </when>
+                  <when test="3">
+                    <ComObjectRefRef RefId="%AID%_O-%TT%01008_R-%TT%0100801" />
+                    <ComObjectRefRef RefId="%AID%_O-%TT%01009_R-%TT%0100901" />
+                    <ComObjectRefRef RefId="%AID%_O-%TT%01017_R-%TT%0101701" />
+                    <ComObjectRefRef RefId="%AID%_O-%TT%01018_R-%TT%0101801" />
+                    <ComObjectRefRef RefId="%AID%_O-%TT%01019_R-%TT%0101901" />
+                    <ComObjectRefRef RefId="%AID%_O-%TT%01020_R-%TT%0102001" />
+                  </when>
+                  <when test="2 3">
+                    <ParameterSeparator Id="%AID%_PS-nnn" Text="" UIHint="HorizontalRuler" />
+                    <ParameterSeparator Id="%AID%_PS-nnn" Text="Automatikkonfiguration" UIHint="Headline" />
+                    <ParameterRefRef RefId="%AID%_P-%TT%01002_R-%TT%0100201" IndentLevel="1" HelpContext="FAN-Schwellwert-Aktivierung" />
+                    <ParameterRefRef RefId="%AID%_P-%TT%01009_R-%TT%0100901" IndentLevel="1" HelpContext="FAN-Schwellwert-Deaktivierung" />
+                    <ParameterRefRef RefId="%AID%_P-%TT%01010_R-%TT%0101001" IndentLevel="1" HelpContext="FAN-Lueftungsmodus-Automatik" />
+                    <choose ParamRefId="%AID%_P-%TT%01010_R-%TT%0101001">
+                      <when test="3">
+                        <ComObjectRefRef RefId="%AID%_O-%TT%01014_R-%TT%0101401" />
+                        <ComObjectRefRef RefId="%AID%_O-%TT%01015_R-%TT%0101501" />
+                      </when>
+                    </choose>
+                    <ParameterRefRef RefId="%AID%_P-%TT%01005_R-%TT%0100501" IndentLevel="1" HelpContext="FAN-Luftfeuchtemessung" />
+                    <ComObjectRefRef RefId="%AID%_O-%TT%01001_R-%TT%0100101" />
+                    <choose ParamRefId="%AID%_P-%TT%01005_R-%TT%0100501">
+                      <when test="1">
+                        <ComObjectRefRef RefId="%AID%_O-%TT%01002_R-%TT%0100201" />
+                        <ComObjectRefRef RefId="%AID%_O-%TT%01003_R-%TT%0100301" />
+                        <ComObjectRefRef RefId="%AID%_O-%TT%01004_R-%TT%0100401" />
+                      </when>
+                    </choose>
+                    <ParameterRefRef RefId="%AID%_P-%TT%01003_R-%TT%0100301" IndentLevel="1" HelpContext="FAN-Steuerungsmodus" />
+                    <choose ParamRefId="%AID%_P-%TT%01003_R-%TT%0100301">
+                      <when test="0">
+                        <ParameterRefRef RefId="%AID%_P-%TT%01008_R-%TT%0100801" IndentLevel="2" HelpContext="FAN-Geschwindigkeit-Grenzwert" />
+                      </when>
+                    </choose>
+                  </when>
+                  <when test="1 2 3">
+                    <ParameterSeparator Id="%AID%_PS-nnn" Text="" UIHint="HorizontalRuler" />
+                    <ParameterSeparator Id="%AID%_PS-nnn" Text="Timerkonfiguration" UIHint="Headline" />
+                    <ParameterRefRef RefId="%AID%_P-%TT%01006_R-%TT%0100601" IndentLevel="1" HelpContext="FAN-Laufzeitauswahl" />
+                    <choose ParamRefId="%AID%_P-%TT%01006_R-%TT%0100601">
+                      <when test="0">
+                        <ParameterRefRef RefId="%AID%_P-%TT%01007_R-%TT%0100701" IndentLevel="1" />
+                      </when>
+                    </choose>
+                  </when>
+                </choose>
+              </ParameterBlock>
+
+              <!-- Lüfter 2: nur sichtbar wenn HardwareConfig = "Ein Lüfter pro Einheit" (Fawas, Wert=1) -->
+              <choose ParamRefId="%AID%_P-%TT%00002_R-%TT%0000201">
+                <when test="1">
+                  <ParameterBlock Id="%AID%_PB-FAN02" Name="Fan2Settings" Text="{{0: Lüfter 2}}" Icon="fan-speed-2" TextParameterRefId="%AID%_P-%TT%02101_R-%TT%0210101" ShowInComObjectTree="true">
+                    <ParameterRefRef RefId="%AID%_P-%TT%02101_R-%TT%0210101" />
+                    <ParameterRefRef RefId="%AID%_P-%TT%02001_R-%TT%0200101" HelpContext="FAN-Betriebsmodus" />
+                    <choose ParamRefId="%AID%_P-%TT%02001_R-%TT%0200101">
+                      <when test="4">
+                        <ComObjectRefRef RefId="%AID%_O-%TT%02016_R-%TT%0201601" />
+                        <ComObjectRefRef RefId="%AID%_O-%TT%02017_R-%TT%0201701" />
+                        <ComObjectRefRef RefId="%AID%_O-%TT%02018_R-%TT%0201801" />
+                        <ComObjectRefRef RefId="%AID%_O-%TT%02019_R-%TT%0201901" />
+                        <ComObjectRefRef RefId="%AID%_O-%TT%02020_R-%TT%0202001" />
+                      </when>
+                      <when test="1 2 3">
+                        <ParameterRefRef RefId="%AID%_P-%TT%02004_R-%TT%0200401" HelpContext="FAN-Lueftungsmodus-Manuell" />
+                        <ComObjectRefRef RefId="%AID%_O-%TT%02005_R-%TT%0200501" />
+                        <ComObjectRefRef RefId="%AID%_O-%TT%02006_R-%TT%0200601" />
+                        <ComObjectRefRef RefId="%AID%_O-%TT%02007_R-%TT%0200701" />
+                        <ComObjectRefRef RefId="%AID%_O-%TT%02012_R-%TT%0201201" />
+                        <ComObjectRefRef RefId="%AID%_O-%TT%02013_R-%TT%0201301" />
+                        <ComObjectRefRef RefId="%AID%_O-%TT%02016_R-%TT%0201601" />
+                        <choose ParamRefId="%AID%_P-%TT%02004_R-%TT%0200401">
+                          <when test="3">
+                            <ComObjectRefRef RefId="%AID%_O-%TT%02010_R-%TT%0201001" />
+                            <ComObjectRefRef RefId="%AID%_O-%TT%02011_R-%TT%0201101" />
+                          </when>
+                        </choose>
+                      </when>
+                      <when test="3">
+                        <ComObjectRefRef RefId="%AID%_O-%TT%02008_R-%TT%0200801" />
+                        <ComObjectRefRef RefId="%AID%_O-%TT%02009_R-%TT%0200901" />
+                        <ComObjectRefRef RefId="%AID%_O-%TT%02017_R-%TT%0201701" />
+                        <ComObjectRefRef RefId="%AID%_O-%TT%02018_R-%TT%0201801" />
+                        <ComObjectRefRef RefId="%AID%_O-%TT%02019_R-%TT%0201901" />
+                        <ComObjectRefRef RefId="%AID%_O-%TT%02020_R-%TT%0202001" />
+                      </when>
+                      <when test="2 3">
+                        <ParameterSeparator Id="%AID%_PS-nnn" Text="" UIHint="HorizontalRuler" />
+                        <ParameterSeparator Id="%AID%_PS-nnn" Text="Automatikkonfiguration" UIHint="Headline" />
+                        <ParameterRefRef RefId="%AID%_P-%TT%02002_R-%TT%0200201" IndentLevel="1" HelpContext="FAN-Schwellwert-Aktivierung" />
+                        <ParameterRefRef RefId="%AID%_P-%TT%02009_R-%TT%0200901" IndentLevel="1" HelpContext="FAN-Schwellwert-Deaktivierung" />
+                        <ParameterRefRef RefId="%AID%_P-%TT%02010_R-%TT%0201001" IndentLevel="1" HelpContext="FAN-Lueftungsmodus-Automatik" />
+                        <choose ParamRefId="%AID%_P-%TT%02010_R-%TT%0201001">
+                          <when test="3">
+                            <ComObjectRefRef RefId="%AID%_O-%TT%02014_R-%TT%0201401" />
+                            <ComObjectRefRef RefId="%AID%_O-%TT%02015_R-%TT%0201501" />
+                          </when>
+                        </choose>
+                        <ParameterRefRef RefId="%AID%_P-%TT%02005_R-%TT%0200501" IndentLevel="1" HelpContext="FAN-Luftfeuchtemessung" />
+                        <ComObjectRefRef RefId="%AID%_O-%TT%02001_R-%TT%0200101" />
+                        <choose ParamRefId="%AID%_P-%TT%02005_R-%TT%0200501">
+                          <when test="1">
+                            <ComObjectRefRef RefId="%AID%_O-%TT%02002_R-%TT%0200201" />
+                            <ComObjectRefRef RefId="%AID%_O-%TT%02003_R-%TT%0200301" />
+                            <ComObjectRefRef RefId="%AID%_O-%TT%02004_R-%TT%0200401" />
+                          </when>
+                        </choose>
+                        <ParameterRefRef RefId="%AID%_P-%TT%02003_R-%TT%0200301" IndentLevel="1" HelpContext="FAN-Steuerungsmodus" />
+                        <choose ParamRefId="%AID%_P-%TT%02003_R-%TT%0200301">
+                          <when test="0">
+                            <ParameterRefRef RefId="%AID%_P-%TT%02008_R-%TT%0200801" IndentLevel="2" HelpContext="FAN-Geschwindigkeit-Grenzwert" />
+                          </when>
+                        </choose>
+                      </when>
+                      <when test="1 2 3">
+                        <ParameterSeparator Id="%AID%_PS-nnn" Text="" UIHint="HorizontalRuler" />
+                        <ParameterSeparator Id="%AID%_PS-nnn" Text="Timerkonfiguration" UIHint="Headline" />
+                        <ParameterRefRef RefId="%AID%_P-%TT%02006_R-%TT%0200601" IndentLevel="1" HelpContext="FAN-Laufzeitauswahl" />
+                        <choose ParamRefId="%AID%_P-%TT%02006_R-%TT%0200601">
+                          <when test="0">
+                            <ParameterRefRef RefId="%AID%_P-%TT%02007_R-%TT%0200701" IndentLevel="1" />
+                          </when>
+                        </choose>
+                      </when>
+                    </choose>
+                  </ParameterBlock>
+                </when>
+              </choose>
             </Channel>
           </Dynamic>
         </ApplicationProgram>

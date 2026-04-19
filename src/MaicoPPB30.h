@@ -9,11 +9,6 @@ public:
   void changeFanSpeedDelegate(int16_t fanSpeed) override;
   int16_t getFanSpeed() override;
 
-  void setFullControlPower(bool on) override;
-  void setFullControlSpeed(uint8_t percent) override;
-  void setFullControlDirection(uint8_t dir) override;
-  uint8_t getFullControlSpeed() override;
-
 protected:
   void updateMode() override;
 
@@ -34,9 +29,4 @@ private:
   int16_t _directionS2 = 1;
 
   bool _directionTimerActive = false;
-
-  // Full control state
-  uint8_t _fullControlPercent = 0;
-  int8_t _fullControlDirection = 1; // 1=Zuluft(A), -1=Abluft(B)
-  void updateFullControl();
 };
