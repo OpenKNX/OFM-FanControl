@@ -58,9 +58,10 @@ class FanChannel : public OpenKNX::Channel
     void updateDiagnostics();
 
     // --- Rechnen ---
-    uint8_t targetPower() const;
-    uint8_t groupPower() const;
+    uint8_t targetPower();
+    uint8_t groupPower();
     uint8_t controlOutput() const;
+    uint8_t hysteresisOutput();
     uint8_t powerToDrive(uint8_t power) const;
     Fan::Direction desiredDirection() const;
     int32_t rpmToFlow(uint16_t rpm) const;
@@ -86,6 +87,7 @@ class FanChannel : public OpenKNX::Channel
     uint8_t _powerSet = 0;      // empfangene Gruppenvorgabe
     float _ctrlValue = 0.0f;    // Istwert fuer die interne Regelung
     bool _ctrlValueSeen = false;
+    bool _hystActive = false;   // Zweipunkt: aktueller Schaltzustand
     uint8_t _powerAct = 0;      // tatsaechlich kommandierte Leistung
     uint8_t _driveAct = 0;      // ausgegebene Stellgroesse
     bool _tact = false;

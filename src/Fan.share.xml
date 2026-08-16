@@ -87,6 +87,7 @@
                   <Enumeration Text="Fester Wert" Value="0" Id="%ENID%" />
                   <Enumeration Text="Externes Kommunikationsobjekt" Value="1" Id="%ENID%" />
                   <Enumeration Text="Interne Regelung" Value="2" Id="%ENID%" />
+                  <Enumeration Text="Zweipunkt mit Hysterese" Value="3" Id="%ENID%" />
                 </TypeRestriction>
               </ParameterType>
 

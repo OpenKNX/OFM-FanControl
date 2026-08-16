@@ -255,7 +255,36 @@ uint8_t FanChannel::controlOutput() const
     return (uint8_t)(out + 0.5f);
 }
 
-uint8_t FanChannel::groupPower() const
+uint8_t FanChannel::hysteresisOutput()
+{
+    // Zweipunkt mit Hysterese: der Schaltzustand bleibt zwischen den Schwellen stehen, sonst
+    // wuerde ein Messwert, der um eine einzelne Schwelle herum zappelt, den Luefter im
+    // Sekundentakt takten.
+    const uint16_t on = ParamFAN_fHystOn;
+    const uint16_t off = ParamFAN_fHystOff;
+    const uint8_t powerOn = ParamFAN_fHystPower;
+    const uint8_t powerOff = ParamFAN_fHystBase;
+
+    if (!_ctrlValueSeen) return powerOff; // noch kein Istwert empfangen
+
+    if (off < on)
+    {
+        // Der uebliche Fall: einschalten oberhalb, ausschalten unterhalb, dazwischen halten.
+        if (_ctrlValue >= (float)on) _hystActive = true;
+        else if (_ctrlValue <= (float)off) _hystActive = false;
+    }
+    else
+    {
+        // Ausschaltschwelle nicht unter der Einschaltschwelle: dann gibt es kein Fenster, in
+        // dem gehalten werden koennte. Statt eine unentscheidbare Lage zu erfinden, wird an
+        // der Einschaltschwelle geschaltet - ohne Hysterese, aber vorhersagbar.
+        _hystActive = (_ctrlValue >= (float)on);
+    }
+
+    return _hystActive ? powerOn : powerOff;
+}
+
+uint8_t FanChannel::groupPower()
 {
     // Die Gruppenvorgabe erzeugt nur der Master; der Slave bekommt sie fertig geliefert.
     if (!_isMaster) return _powerSet;
@@ -264,11 +293,12 @@ uint8_t FanChannel::groupPower() const
     {
         case Fan::SetpointSource::Fixed: return ParamFAN_fFixedPower;
         case Fan::SetpointSource::InternalControl: return controlOutput();
+        case Fan::SetpointSource::Hysteresis: return hysteresisOutput();
         default: return _powerSet;
     }
 }
 
-uint8_t FanChannel::targetPower() const
+uint8_t FanChannel::targetPower()
 {
     if (_masterTimeout) return 0;
 

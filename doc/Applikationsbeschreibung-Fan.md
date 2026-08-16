@@ -195,7 +195,9 @@ Bestimmt, woraus der Master die Leistungsvorgabe für die Gruppe bildet.
 * **Externes Kommunikationsobjekt** — die Vorgabe kommt von außen, etwa aus einer
   Visualisierung, einer Zeitschaltuhr oder einem Logikbaustein.
 * **Interne Regelung** — der Master regelt selbst auf einen Messwert, zum Beispiel CO₂ oder
-  relative Luftfeuchte.
+  relative Luftfeuchte. Die Leistung steigt proportional an.
+* **Zweipunkt mit Hysterese** — der Master schaltet an zwei Schwellen zwischen zwei festen
+  Leistungen um, ohne Zwischenwerte.
 
 Unabhängig von der Quelle multipliziert jeder Knoten die Gruppenvorgabe mit seinem eigenen
 Anteilsfaktor.
@@ -250,6 +252,39 @@ stattdessen einen kleinen Wert, damit immer ein Mindestluftwechsel bleibt.
 
 Obergrenze der Regelung. Der Regler geht nie über diesen Wert hinaus, auch wenn der Messwert
 das Proportionalband überschreitet.
+
+<!-- DOC HelpContext="Einschaltschwelle" -->
+### Einschaltschwelle
+
+Messwert, ab dem der Lüfter auf die eingeschaltete Leistung geht, in der Einheit der
+Regelgröße.
+
+<!-- DOC HelpContext="Ausschaltschwelle" -->
+### Ausschaltschwelle
+
+Messwert, bei dessen Unterschreiten der Lüfter wieder auf die ausgeschaltete Leistung
+zurückfällt.
+
+Zwischen den beiden Schwellen bleibt der zuletzt erreichte Zustand stehen — das ist die
+Hysterese. Ohne sie würde ein Messwert, der um eine einzelne Schwelle pendelt, den Lüfter im
+Sekundentakt takten.
+
+> Liegt die Ausschaltschwelle **nicht unter** der Einschaltschwelle, gibt es kein Fenster zum
+> Halten. Dann entfällt die Hysterese und es wird schlicht an der Einschaltschwelle
+> umgeschaltet.
+
+<!-- DOC HelpContext="Leistung eingeschaltet" -->
+### Leistung eingeschaltet
+
+Leistung oberhalb der Einschaltschwelle.
+
+<!-- DOC HelpContext="Leistung ausgeschaltet" -->
+### Leistung ausgeschaltet
+
+Leistung unterhalb der Ausschaltschwelle. **0 %** hält den Lüfter an; ein kleiner Wert lässt
+ihn statt dessen auf Grundlast weiterlaufen.
+
+Solange noch kein Istwert empfangen wurde, gilt dieser Wert.
 
 ## Richtungsart
 

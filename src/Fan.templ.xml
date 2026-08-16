@@ -123,7 +123,13 @@
                    Union-Groesse muss dabei so angepasst werden, dass das Blockende bei 80 bleibt. -->
               <Union SizeInBit="144">
                 <Memory CodeSegment="%AID%_RS-04-00000" Offset="62" BitOffset="0" />
-                <Parameter Id="%AID%_UP-%TT%%CC%099" Name="f%C%Reserve" Offset="0" BitOffset="0" ParameterType="%AID%_PT-FanPercent" Text="Reserve" Value="0" Access="None" />
+                <!-- Zweipunkt mit Hysterese. Schwellen in der Einheit der Regelgroesse,
+                     dieselbe wie beim P-Regler; beide teilen sich auch den Istwert-Eingang. -->
+                <Parameter Id="%AID%_UP-%TT%%CC%060" Name="f%C%HystOn"    Offset="0" BitOffset="0" ParameterType="%AID%_PT-FanCtrlSetpoint" Text="Einschaltschwelle" Value="60" />
+                <Parameter Id="%AID%_UP-%TT%%CC%061" Name="f%C%HystOff"   Offset="2" BitOffset="0" ParameterType="%AID%_PT-FanCtrlSetpoint" Text="Ausschaltschwelle" Value="50" />
+                <Parameter Id="%AID%_UP-%TT%%CC%062" Name="f%C%HystPower" Offset="4" BitOffset="0" ParameterType="%AID%_PT-FanPercent"      Text="Leistung eingeschaltet" SuffixText=" %" Value="100" />
+                <Parameter Id="%AID%_UP-%TT%%CC%063" Name="f%C%HystBase"  Offset="5" BitOffset="0" ParameterType="%AID%_PT-FanPercent"      Text="Leistung ausgeschaltet" SuffixText=" %" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%099" Name="f%C%Reserve" Offset="6" BitOffset="0" ParameterType="%AID%_PT-FanPercent" Text="Reserve" Value="0" Access="None" />
               </Union>
 
             </Parameters>
@@ -136,6 +142,10 @@
               <ParameterRef Id="%AID%_UP-%TT%%CC%055_R-%TT%%CC%05501" RefId="%AID%_UP-%TT%%CC%055" />
               <ParameterRef Id="%AID%_UP-%TT%%CC%056_R-%TT%%CC%05601" RefId="%AID%_UP-%TT%%CC%056" />
               <ParameterRef Id="%AID%_UP-%TT%%CC%057_R-%TT%%CC%05701" RefId="%AID%_UP-%TT%%CC%057" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%060_R-%TT%%CC%06001" RefId="%AID%_UP-%TT%%CC%060" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%061_R-%TT%%CC%06101" RefId="%AID%_UP-%TT%%CC%061" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%062_R-%TT%%CC%06201" RefId="%AID%_UP-%TT%%CC%062" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%063_R-%TT%%CC%06301" RefId="%AID%_UP-%TT%%CC%063" />
               <ParameterRef Id="%AID%_UP-%TT%%CC%099_R-%TT%%CC%09901" RefId="%AID%_UP-%TT%%CC%099" />
               <ParameterRef Id="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" RefId="%AID%_P-%TT%%CC%000" />
               <ParameterRef Id="%AID%_UP-%TT%%CC%001_R-%TT%%CC%00101" RefId="%AID%_UP-%TT%%CC%001" />
@@ -331,6 +341,16 @@
                               <ParameterRefRef RefId="%AID%_UP-%TT%%CC%054_R-%TT%%CC%05401" IndentLevel="2" HelpContext="%DOC%" />
                               <ParameterRefRef RefId="%AID%_UP-%TT%%CC%055_R-%TT%%CC%05501" IndentLevel="2" HelpContext="%DOC%" />
                               <ParameterRefRef RefId="%AID%_UP-%TT%%CC%056_R-%TT%%CC%05601" IndentLevel="2" HelpContext="%DOC%" />
+                            </when>
+                            <when test="3">
+                              <!-- Regelgroesse und Istwert-Eingang sind dieselben wie beim
+                                   P-Regler, nur die Auswertung ist eine andere. -->
+                              <ParameterRefRef RefId="%AID%_UP-%TT%%CC%052_R-%TT%%CC%05201" IndentLevel="2" HelpContext="%DOC%" />
+                              <ParameterRefRef RefId="%AID%_UP-%TT%%CC%060_R-%TT%%CC%06001" IndentLevel="2" HelpContext="%DOC%" />
+                              <ParameterRefRef RefId="%AID%_UP-%TT%%CC%061_R-%TT%%CC%06101" IndentLevel="2" HelpContext="%DOC%" />
+                              <ParameterRefRef RefId="%AID%_UP-%TT%%CC%062_R-%TT%%CC%06201" IndentLevel="2" HelpContext="%DOC%" />
+                              <ParameterRefRef RefId="%AID%_UP-%TT%%CC%063_R-%TT%%CC%06301" IndentLevel="2" HelpContext="%DOC%" />
+                              <ParameterSeparator Id="%AID%_PS-nnn" Text="Liegt die Ausschaltschwelle nicht unter der Einschaltschwelle, entfällt die Hysterese und es wird an der Einschaltschwelle umgeschaltet." UIHint="Information" />
                             </when>
                           </choose>
                         </when>
@@ -534,7 +554,8 @@
                             <when test="1">
                               <ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00102" />
                             </when>
-                            <when test="2">
+                            <when test="2 3">
+                              <!-- Interne Regelung und Zweipunkt brauchen beide den Istwert -->
                               <choose ParamRefId="%AID%_UP-%TT%%CC%052_R-%TT%%CC%05201">
                                 <when test="0"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%008_R-%TT%%CC%00801" /></when>
                                 <when test="1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%008_R-%TT%%CC%00802" /></when>

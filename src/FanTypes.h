@@ -31,7 +31,8 @@ namespace Fan
     {
         Fixed = 0,
         ExternalKo = 1,
-        InternalControl = 2
+        InternalControl = 2,
+        Hysteresis = 3
     };
 
     /** Richtungsart-Vorgabe in der ETS (Parameter "Richtungsart"). */
