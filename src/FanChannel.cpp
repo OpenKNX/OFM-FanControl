@@ -12,9 +12,10 @@ FanChannel::FanChannel(uint8_t index, IFanHardware &hardware) : _hw(hardware)
 
 void FanChannel::setup()
 {
-    // Wie viele Luefter es gibt, entscheidet der geraeteweite Zaehler - nicht ein Kanaltyp
-    // mit Wert "Deaktiviert". Die ersten N Kanaele sind aktiv.
-    _active = (_channelIndex < ParamFAN_FanCount);
+    // Ob dieser Kanal benutzt wird, sagt die Kanalaktivitaet aus der Kanalauswahl-Tabelle.
+    // Ein geraeteweiter Zaehler waere das mit dem Kanalauswahl-Beschluss (09.07.2026)
+    // abgeschaffte Muster; die Sichtbarkeit haengt in der ETS an genau diesem Parameter.
+    _active = ParamFAN_fActive;
     if (!_active) return;
 
     _type = (Fan::ChannelType)ParamFAN_fMode;

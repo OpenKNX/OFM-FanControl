@@ -2,8 +2,8 @@
 
 Modul zur Steuerung dezentraler Lüfter, einzeln oder im reversierenden Verbund.
 
-Ein Gerät bedient **zwei Knoten**; ein Knoten ist ein Lüfter mit seiner Ansteuerung und in der
-ETS ein Kanal. Mehrere Knoten lassen sich über gemeinsame Gruppenadressen zu einer **Gruppe**
+Ein Gerät bedient **bis zu acht Knoten** — so viele, wie seine Hardware Ausgänge hat; ein Knoten
+ist ein Lüfter mit seiner Ansteuerung und in der ETS ein Kanal. Mehrere Knoten lassen sich über gemeinsame Gruppenadressen zu einer **Gruppe**
 zusammenfassen, in der genau ein Knoten die Rolle des **Masters** übernimmt.
 
 > Die Hilfetexte dieser Datei werden vom OpenKNXproducer in die kontextsensitive Hilfe der ETS
@@ -29,23 +29,6 @@ wechselt mit dem Taktzustand, den der Master vorgibt.
 
 ## Allgemein
 
-<!-- DOC HelpContext="Anzahl Lüfter" -->
-### Anzahl Lüfter
-
-Wie viele Lüfter das Gerät steuert, einstellbar von 1 bis 8. Es werden genau so viele
-Lüfter-Reiter und Zeilen in der Kanalauswahl eingeblendet.
-
-Dieser Wert sagt nur, **wie viele** Lüfter es gibt. Welcher Art ein Lüfter ist, legt „Modus" auf
-seinem eigenen Reiter fest.
-
-> **Mehr Lüfter als Ausgänge:** Die Applikation ist auf bis zu 8 Lüfter ausgelegt, die
-> tatsächliche Zahl der Ausgänge bestimmt aber die Hardware. Stellt man mehr Lüfter ein, als das
-> Gerät treiben kann, laufen die überzähligen nicht — das Gerät meldet beim Start einen
-> Konfigurationsfehler und schreibt die vorhandene Zahl ins Log.
-
-Die Kommunikationsobjekte aller 8 möglichen Lüfter sind in der Applikation fest angelegt; ein
-kleinerer Wert blendet sie in der ETS aus, verschiebt aber keine Objektnummern.
-
 <!-- DOC HelpContext="PWM-Frequenz" -->
 ### PWM-Frequenz
 
@@ -61,6 +44,27 @@ Signal nicht mehr sauber auswertet, eine zu niedrige kann hörbar werden.
 
 ## Kanaldefinition
 
+<!-- DOC HelpContext="Kanalaktivität" -->
+### Kanalaktivität
+
+Schaltet diesen Lüfterkanal ein oder aus. Steht **ausschließlich in der Kanalauswahl** — auf dem
+Lüfter-Reiter erscheint das Feld bewusst nicht noch einmal.
+
+* **Deaktiviert** — der Kanal wird nicht benutzt. Es gibt keinen Lüfter-Reiter und keine
+  Kommunikationsobjekte; die Beschreibung bleibt trotzdem editierbar.
+* **Aktiviert** — der Kanal wird benutzt und erhält seinen eigenen Reiter.
+
+Die Kanäle sind unabhängig voneinander: es ist zulässig, nur Lüfter 2 zu aktivieren und Lüfter 1
+ungenutzt zu lassen.
+
+Das ist die dauerhafte Festlegung „ist der Kanal bestückt". Um einen **vorhandenen** Kanal
+vorübergehend ruhen zu lassen — für Service oder Fehlersuche — dient „Suspendiert" auf dem
+Lüfter-Reiter; dabei bleiben Objekte und Gruppenadressen erhalten.
+
+> **Mehr Kanäle als Ausgänge:** Die Applikation bietet 8 Kanäle an, die Zahl der tatsächlichen
+> Ausgänge bestimmt die Hardware. Werden mehr Kanäle aktiviert, als das Gerät treiben kann,
+> laufen die überzähligen nicht — das Gerät meldet beim Start einen Konfigurationsfehler.
+
 <!-- DOC HelpContext="Modus" -->
 ### Modus
 
@@ -72,8 +76,8 @@ Legt fest, wie dieser Lüfter gefahren wird.
   Stellgröße Minimum und Maximum werden je Richtung eingestellt, und die Mittelstellung ist der
   Stillstand.
 
-Der Modus gehört zum einzelnen Lüfter und steht deshalb hier, nicht in der Kanalauswahl. Wie
-viele Lüfter es überhaupt gibt, legt „Anzahl Lüfter" unter *Allgemein* fest.
+Der Modus gehört zum einzelnen Lüfter und steht deshalb hier, nicht in der Kanalauswahl. Ob der
+Kanal überhaupt benutzt wird, legt „Kanalaktivität" in der Kanalauswahl fest.
 
 Ob die Hardware eine zweite Förderrichtung unterstützt, hängt vom Board und von der eingestellten
 Mittelstellung ab; passt beides nicht zusammen, meldet das Gerät einen Konfigurationsfehler.

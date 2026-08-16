@@ -58,12 +58,19 @@ void FanModule::setup(bool configured)
         return;
     }
 
-    // Die ETS erlaubt bis zu FAN_ChannelCount Luefter - das ist eine Eigenschaft der
-    // Applikation. Wie viele davon Pins haben, weiss nur das Board. Ueberzaehlige Kanaele
-    // werden gemeldet und nicht angelegt, statt stumm nichts zu tun.
-    if (ParamFAN_FanCount > BoardChannels)
-        logErrorP("%u Luefter konfiguriert, das Board hat nur %u Ausgaenge - die uebrigen bleiben aus",
-                  (unsigned)ParamFAN_FanCount, (unsigned)BoardChannels);
+    // Die ETS bietet FAN_ChannelCount Kanaele an - das ist eine Eigenschaft der Applikation.
+    // Wie viele davon Pins haben, weiss nur das Board. Aktivierte Kanaele jenseits davon
+    // werden gemeldet, statt stumm nichts zu tun. Der Kanalindex steckt hier nicht in einem
+    // FanChannel, deshalb wird die Adresse von Hand gerechnet statt ParamFAN_fActive benutzt.
+    for (uint8_t i = BoardChannels; i < FAN_ChannelCount; i++)
+    {
+        const uint16_t addr = FAN_ParamBlockOffset + i * FAN_ParamBlockSize + FAN_fActive;
+        if (knx.paramByte(addr) & FAN_fActiveMask)
+        {
+            logErrorP("Luefter %u ist aktiviert, das Board hat aber nur %u Ausgaenge",
+                      (unsigned)(i + 1), (unsigned)BoardChannels);
+        }
+    }
 
     for (uint8_t i = 0; i < BoardChannels; i++)
     {
