@@ -1,77 +1,80 @@
 #include "RP2040FanHardware.h"
+#include <Arduino.h>
 #include "hardware.h"
 
+void RP2040FanHardware::configurePwm(uint32_t freqHz)
+{
+    // Global fuer den Core, deshalb nur einmal aus FanModule::setup() aufrufen.
+    if (freqHz < 500) freqHz = 500;
+    if (freqHz > 20000) freqHz = 20000;
 
-RP2040FanHardware::RP2040FanHardware() {
+    analogWriteFreq(freqHz);
+    analogWriteRange(PwmRange);
 }
 
-RP2040FanHardware::~RP2040FanHardware() {
-    stopDirectionTimer();
+void RP2040FanHardware::init(int8_t pinDrive, int8_t pinDriveMirror, int8_t pinSwitch)
+{
+    _pinDrive = pinDrive;
+    _pinDriveMirror = pinDriveMirror;
+    _pinSwitch = pinSwitch;
+
+    if (_pinDrive >= 0) pinMode(_pinDrive, OUTPUT);
+    if (_pinDriveMirror >= 0) pinMode(_pinDriveMirror, OUTPUT);
+    if (_pinSwitch >= 0) pinMode(_pinSwitch, OUTPUT);
+
+    stop();
 }
 
-void RP2040FanHardware::init(uint8_t s1_pin, uint8_t s2_pin, uint8_t sw_pin) {
-    pinMode(sw_pin, OUTPUT);
-    pinMode(s1_pin, OUTPUT);
-    pinMode(s2_pin, OUTPUT);
-    pinMode(STATUS_LED_PIN, OUTPUT);
-    
-    analogWriteFreq(pwmFreqHz);
-    analogWriteResolution(10);
+void RP2040FanHardware::writeDuty(uint8_t dutyPercent)
+{
+    if (dutyPercent > 100) dutyPercent = 100;
+
+    // Bewusst kein Sonderfall fuer 0: bei dieser Ansteuerung ist 0 % volle Leistung
+    // Richtung A und damit ein gueltiger Betriebspunkt, kein "aus".
+    uint32_t duty = (uint32_t)dutyPercent * PwmRange / 100;
+
+#ifdef FAN_PWM_ACTIVE_LOW
+    // Invertierende Endstufe (Level-Shifter auf NMOS mit Pullup): das Tastverhaeltnis am Pin
+    // ist das Gegenstueck zu dem, was der Luefter sehen soll. Die Umkehr passiert bewusst
+    // erst hier - alles darueber rechnet in Werten, die am Luefter ankommen.
+    duty = PwmRange - duty;
+#endif
+
+    // Der Spiegel-Ausgang bekommt exakt dasselbe Signal (zweiter Luefter desselben Geraetes).
+    if (_pinDrive >= 0) analogWrite(_pinDrive, duty);
+    if (_pinDriveMirror >= 0) analogWrite(_pinDriveMirror, duty);
 }
 
-void RP2040FanHardware::setPWM(uint8_t pin, int16_t value) {
-    analogWrite(pin, value);
-}
-
-void RP2040FanHardware::setDigital(uint8_t pin, bool value) {
-    digitalWrite(pin, value ? HIGH : LOW);
-}
-
-bool RP2040FanHardware::staticDirectionCallback(struct repeating_timer *t) {
-    auto hw = static_cast<RP2040FanHardware*>(t->user_data);
-    if (hw && hw->_directionCallback) {
-        hw->_directionCallback();
+void RP2040FanHardware::drive(Fan::Direction dir, uint8_t speedPercent)
+{
+    if (speedPercent == 0)
+    {
+        stop();
+        return;
     }
-    return true;
-}
 
-void RP2040FanHardware::startDirectionTimer(long intervalMs, std::function<void()> callback) {
-    if (_directionTimerActive) {
-        cancel_repeating_timer(&_directionTimer);
+    if (speedPercent > 100) speedPercent = 100;
+
+    uint8_t duty;
+    if (dir == Fan::Direction::A && _midpoint > 0)
+    {
+        // Untere Haelfte: von der Mittelstellung Richtung 0.
+        duty = (uint8_t)(_midpoint - (uint32_t)speedPercent * _midpoint / 100);
     }
-    _directionCallback = callback;
-    _directionTimerActive = true;
-    add_repeating_timer_ms(intervalMs, staticDirectionCallback, this, &_directionTimer);
-}
-
-void RP2040FanHardware::stopDirectionTimer() {
-    if (_directionTimerActive) {
-        cancel_repeating_timer(&_directionTimer);
-        _directionTimerActive = false;
+    else
+    {
+        // Obere Haelfte: von der Mittelstellung Richtung 100.
+        // Auch der Fall Mittelstellung 0 (gewoehnlicher Luefter) laeuft hier durch.
+        duty = (uint8_t)(_midpoint + (uint32_t)speedPercent * (100 - _midpoint) / 100);
     }
+
+    writeDuty(duty);
+    if (_pinSwitch >= 0) digitalWrite(_pinSwitch, HIGH);
 }
 
-int64_t RP2040FanHardware::staticTimeoutCallback(alarm_id_t id, void *user_data) {
-    auto hw = static_cast<RP2040FanHardware*>(user_data);
-    if (hw) {
-        hw->_oneShotTimerActive = false;
-        if (hw->_oneShotCallback) {
-            hw->_oneShotCallback();
-        }
-    }
-    return 0;
-}
-
-void RP2040FanHardware::startOneShotTimer(long delayMs, std::function<void()> callback) {
-    stopOneShotTimer();
-    _oneShotCallback = callback;
-    _oneShotTimerActive = true;
-    _oneShotAlarmID = add_alarm_in_ms(delayMs, staticTimeoutCallback, this, false);
-}
-
-void RP2040FanHardware::stopOneShotTimer() {
-    if (_oneShotTimerActive) {
-        cancel_alarm(_oneShotAlarmID);
-        _oneShotTimerActive = false;
-    }
+void RP2040FanHardware::stop()
+{
+    // Sicherer Zustand ist die Mittelstellung, nicht 0 %.
+    writeDuty(_midpoint);
+    if (_pinSwitch >= 0) digitalWrite(_pinSwitch, LOW);
 }

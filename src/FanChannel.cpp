@@ -1,244 +1,743 @@
 #include "FanChannel.h"
+#include "knxprod.h"
 
-#include "Fan.h"
-#include "OpenKNX.h"
-
-FanChannel::FanChannel(uint8_t iChannelNumber, Fan& fan):
-_fan(fan)
+FanChannel::FanChannel(uint8_t index, IFanHardware &hardware) : _hw(hardware)
 {
-    _channelIndex = iChannelNumber;
+    _channelIndex = index;
 }
 
-const std::string FanChannel::name()
+// ===========================================================================
+// Setup
+// ===========================================================================
+
+void FanChannel::setup()
 {
-    return "FanChannel" + _channelIndex;
-}
+    _type = (Fan::ChannelType)ParamFAN_fChannelType;
+    if (!isActive()) return;
 
-void FanChannel::setup(bool configured)
-{
-    if (!configured)
-        return;
-    
-    setOpMode(ParamFAN_CH_OpMode);
-    setVentilationMode(ParamFAN_CH_VentMode);
-    setVentilationMode(ParamFAN_CH_VentModeAutomatic, Fan::VentilationModeTarget_Automatic);
-    setControlMode(ParamFAN_CH_ControlMode);
-    setHumiditySensorMode(ParamFAN_CH_HumSensMode);
-    _fan.thresholdHumidityOn = ParamFAN_CH_ThresholdHumidityOn;
-    _fan.thresholdHumidityOff = ParamFAN_CH_ThresholdHumidityOff;
-    _fan.thresholdSpeed = ParamFAN_CH_ThresholdSpeed;
-    
-    // Set up callback to update KO feedback when fan speed changes
-    _fan.setSpeedChangeCallback([this](int16_t newSpeed) {
-        KoFAN_CH_LevelFeedback.value(newSpeed, DPT_Value_1_Ucount);
-    });
+    _isMaster = ParamFAN_fIsMaster;
+    _hasTacho = ParamFAN_fHasTacho;
 
-}
-
-void FanChannel::resetFan()
-{
-    _fan.setFanSpeed(0);
-}
-
-int16_t FanChannel::getFanSpeed()
-{
-    return _fan.getFanSpeed();
-}
-
-
-void FanChannel::setOpMode(uint8_t opModeIdx)
-{   
-    switch (opModeIdx)
+    // Richtungsart: der Master nimmt die ETS-Vorgabe, sofern sie nicht "ueber KO" lautet.
+    // Der Slave startet reversierend und wartet auf das Telegramm des Masters.
+    if (_isMaster)
     {
-    case 0:
-        _fan.setOperatingMode(Fan::OperatingMode::Off);
-        break;
-    case 1:
-        _fan.setOperatingMode(Fan::OperatingMode::Manual);
-        break;
-    case 2:
-        _fan.setOperatingMode(Fan::OperatingMode::Automatic);
-        break;
-    case 4:
-        _fan.setOperatingMode(Fan::OperatingMode::FullControl);
-        break;
-    default:
-        break;
+        const Fan::DirModeSel sel = (Fan::DirModeSel)ParamFAN_fDirModeSel;
+        if (sel != Fan::DirModeSel::ViaKo) _dirMode = (Fan::DirMode)sel;
     }
-}
 
-void FanChannel::setVentilationMode(uint8_t ventilationModeIdx, Fan::VentilationModeTarget target)
-{
-    switch (ventilationModeIdx)
+    // Der ETS-Parameter liefert den Anfangswert; ein spaeter empfangenes KO ueberschreibt ihn
+    // und wird persistiert (restore() laeuft nach setup()).
+    _suspended = ParamFAN_fSuspended;
+
+    // Die Mittelstellung trennt die beiden Foerderrichtungen und ist zugleich der sichere
+    // Zustand - das gibt es ausschliesslich beim reversiblen Luefter. Ein nicht reversibler
+    // Luefter wird gewoehnlich gefahren: 0 = Stillstand, 100 = Vollgas. Deshalb wird der
+    // Parameter hier nicht nur in der ETS ausgeblendet, sondern auch verworfen; sonst wuerde
+    // ein Restwert aus einer frueheren Konfiguration den Luefter auf halber Kraft festhalten.
+    const uint8_t midpoint = (_type == Fan::ChannelType::Reversible) ? (uint8_t)ParamFAN_fDriveMid : 0;
+    _hw.setMidpoint(midpoint);
+
+    _configFault = (_type == Fan::ChannelType::Reversible) && (midpoint == 0);
+    if (_configFault)
+        logErrorP("Kanaltyp Reversibel, aber die Mittelstellung ist 0 - keine zweite Richtung moeglich");
+
+    // Kennlinien-Plausibilitaet: Zwischenpunkte muessen aufsteigend unter der Maximaldrehzahl
+    // liegen. Richtung B wird nur geprueft, wenn sie ueberhaupt angefahren werden kann.
+    if (_hasTacho)
     {
-    case 0: 
-        _fan.setVentilationMode(Fan::VentilationMode::HeatRecovery, target);
-        break;
-    case 1:
-        _fan.setVentilationMode(Fan::VentilationMode::SupplyAir, target);
-        break;
-    case 2:
-        _fan.setVentilationMode(Fan::VentilationMode::ExhaustAir, target);
-        break;
-    default:
-        break;
-    }
-}
-
-void FanChannel::setControlMode(uint8_t controlModeIdx)
-{
-    switch (controlModeIdx)
-    {
-    case 0:
-        _fan.setControlMode(Fan::ControlMode::Threshold);
-        break;
-    case 1:
-        _fan.setControlMode(Fan::ControlMode::Adaptive);
-        break;
-    default:
-        break;
-    }
-}
-
-void FanChannel::setHumiditySensorMode(uint8_t humiditySensorModeIdx)
-{
-    switch (humiditySensorModeIdx)
-    {
-    case 0:
-        _fan.humiditySensorMode = Fan::HumiditySensorMode::Relative;
-        break;
-    case 1:
-        _fan.humiditySensorMode = Fan::HumiditySensorMode::Absolute;
-        break;
-    default:
-        break;
-    }
-}
-
-
-void FanChannel::processInputKo(GroupObject& ko)
-{
-    if (!ko.initialized())
-        return;
-    uint16_t kobj = ko.asap();
-    switch (FAN_KoCalcIndex(kobj))
-    {
-        case FAN_KoCH_Level:
+        if (ParamFAN_fCurveA_RpmM > 0 &&
+            (ParamFAN_fCurveA_Rpm1 > ParamFAN_fCurveA_Rpm2 ||
+             ParamFAN_fCurveA_Rpm2 > ParamFAN_fCurveA_RpmM))
         {
-            int8_t speed = ko.value(DPT_Value_1_Ucount);
-            _fan.setFanSpeed(speed);
+            _configFault = true;
+            logErrorP("Kennlinie Richtung A: Punkte nicht aufsteigend");
+        }
+
+        if (_type == Fan::ChannelType::Reversible && ParamFAN_fCurveB_RpmM > 0 &&
+            (ParamFAN_fCurveB_Rpm1 > ParamFAN_fCurveB_Rpm2 ||
+             ParamFAN_fCurveB_Rpm2 > ParamFAN_fCurveB_RpmM))
+        {
+            _configFault = true;
+            logErrorP("Kennlinie Richtung B: Punkte nicht aufsteigend");
+        }
+    }
+
+    const uint32_t now = millis();
+    _stateSince = now;
+    _cycleStarted = now;
+    _blockWindowStart = now;
+    _lastSecondTick = now;
+}
+
+// ===========================================================================
+// Persistenz
+// ===========================================================================
+
+FanChannel::PersistentState FanChannel::persistentState() const
+{
+    PersistentState s;
+    s.flags = (uint8_t)((_enableLatched ? 0 : 0x01) |
+                        (_suspended ? 0x02 : 0x00) |
+                        (_enableSeenEver ? 0x04 : 0x00));
+    s.runSeconds = _runSeconds;
+    return s;
+}
+
+void FanChannel::restore(const PersistentState &state)
+{
+    // Bit0 gesetzt bedeutet: es lag eine Sperre an, die den Ausfall ueberlebt (E-1e).
+    _enableLatched = (state.flags & 0x01) == 0;
+    _suspended = (state.flags & 0x02) != 0;
+    _enableSeenEver = (state.flags & 0x04) != 0;
+    _runSeconds = state.runSeconds;
+
+    // E-1f: war die Freigabe schon einmal verknuepft, laeuft die Ueberwachung ab dem Neustart
+    // weiter - ohne auf ein erstes Telegramm zu warten. Sonst liefe ein Geraet, das mit
+    // gespeicherter Freigabe startet und danach keine Telegramme mehr bekommt (abgezogene
+    // Buslinie, ausgefallener Druckwaechter), unbegrenzt weiter. Genau das soll das
+    // Ruhestromprinzip verhindern.
+    if (_enableSeenEver)
+    {
+        _enableWatchRunning = true;
+        _lastEnableSeen = millis();
+    }
+}
+
+// ===========================================================================
+// Empfang
+// ===========================================================================
+
+void FanChannel::processInputKo(GroupObject &ko)
+{
+    if (!isActive()) return;
+
+    const uint32_t now = millis();
+    const int index = FAN_KoCalcIndex(ko.asap());
+
+    switch (index)
+    {
+        case FAN_KoEnable:
+        {
+            const bool enabled = (bool)ko.value(DPT_Enable);
+            _lastEnableSeen = now;
+            _enableWatchRunning = true;
+
+            // Einmal gesehen heisst: das Objekt ist verknuepft. Das wird persistiert, damit die
+            // Ueberwachung nach einem Neustart sofort wieder laeuft (E-1f, siehe restore()).
+            if (!_enableSeenEver)
+            {
+                _enableSeenEver = true;
+                _persistDirty = true;
+            }
+
+            if (_enableLatched != enabled)
+            {
+                _enableLatched = enabled;
+                _persistDirty = true;
+                if (!enabled) logInfoP("Freigabe entzogen, Sperre ist selbsthaltend");
+            }
             break;
         }
-        case FAN_KoCH_LevelUpDown:
+
+        case FAN_KoPowerSet:
+            _powerSet = (uint8_t)ko.value(DPT_Scaling);
+            break;
+
+        case FAN_KoDirMode:
         {
-            int8_t updown = ko.value(DPT_Step);
-            if(updown == 1)
-                _fan.setFanSpeed(_fan.getFanSpeed() + 1);
+            const uint8_t raw = (uint8_t)ko.value(DPT_Value_1_Ucount);
+            if (raw > (uint8_t)Fan::DirMode::Last)
+            {
+                _invalidValue = true;
+                logErrorP("Ungueltige Richtungsart empfangen: %u", raw);
+            }
             else
-                _fan.setFanSpeed(_fan.getFanSpeed() - 1);
-            break;
-        }
-        case FAN_KoCH_OpMode:
-        {
-            if(ParamFAN_CH_OpMode == 3)
             {
-                uint8_t opModeIdx = ko.value(DPT_Value_1_Ucount);
-                if(opModeIdx == 0)
-                    _fan.setOperatingMode(Fan::OperatingMode::Manual);
-                else if(opModeIdx == 1)
-                    _fan.setOperatingMode(Fan::OperatingMode::Automatic);
-                else if(opModeIdx == 2)
-                    _fan.setOperatingMode(Fan::OperatingMode::FullControl);
-                KoFAN_CH_OpModeFeedback.value(opModeIdx, DPT_Value_1_Ucount);
+                _invalidValue = false;
+                _dirMode = (Fan::DirMode)raw;
             }
             break;
         }
-        case FAN_KoCH_VentMode:
-        {
-            if(ParamFAN_CH_VentMode == 3)
-            {
-                uint8_t ventilationModeIdx = ko.value(DPT_Value_1_Ucount);
-                setVentilationMode(ventilationModeIdx);
-                KoFAN_CH_VentModeFeedback.value(ventilationModeIdx, DPT_Value_1_Ucount);
-            }
-            break;
-        }
-        case FAN_KoCH_VentModeAutomatic:
-        {
-            if(ParamFAN_CH_VentModeAutomatic == 3)
-            {
-                uint8_t ventilationModeIdx = ko.value(DPT_Value_1_Ucount);
-                setVentilationMode(ventilationModeIdx, Fan::VentilationModeTarget_Automatic);
-                KoFAN_CH_VentModeFeedbackAutomatic.value(ventilationModeIdx, DPT_Value_1_Ucount);
-            }
-            break;
-        }
-        case FAN_KoCH_TemperatureInside:
-        {
-            _fan.setInsideTemperature(ko.value(DPT_Value_Temp));
-            break;
-        }
-        case FAN_KoCH_HumidityInside:
-        {
-            float humidity = ko.value(DPT_Value_Humidity);
-            _fan.setInsideHumdity(humidity);
-            break;
-        }
-        case FAN_KoCH_TemperatureOutside:
-        {
-            _fan.setOutsideTemperature(ko.value(DPT_Value_Temp));
-            break;
-        }
-        case FAN_KoCH_HumidityOutside:
-        {
-            _fan.setOutsideHumidity(ko.value(DPT_Value_Humidity));
-            break;
-        }
-        case FAN_KoCH_TimerActivation:
-        {
-            uint8_t timerenable = ko.value(DPT_Enable);
-            if(timerenable){
-                int32_t runtime;
-                if(ParamFAN_CH_TimerSelection == 0) // Manual
-                    runtime = ParamFAN_CH_TimerValue;
-                else
-                    runtime = ParamFAN_CH_TimerSelection;
 
-                _fan.setTimer(runtime, std::bind(&FanChannel::timerCallback, this));
-                int16_t timeractive = 1;
-                KoFAN_CH_TimerFeedback.value(timeractive, DPT_State);
-            }
-            else{
-                _fan.stopTimer();
-                int16_t timeractive = 0;
-                KoFAN_CH_TimerFeedback.value(timeractive, DPT_State);
+        case FAN_KoTact:
+            if (!_isMaster)
+            {
+                _tact = (bool)ko.value(DPT_Bool);
+                _lastMasterSeen = now;
             }
             break;
-        }
-        case FAN_KoCH_FullControlPower:
+
+        case FAN_KoMasterAlive:
+            if (!_isMaster)
+            {
+                _lastMasterSeen = now;
+                _masterTimeout = false;
+            }
+            break;
+
+        case FAN_KoBoost:
+            if (_isMaster)
+            {
+                if ((bool)ko.value(DPT_Start))
+                    _boostUntil = now + (uint32_t)ParamFAN_fBoostTime * 1000;
+                else
+                    _boostUntil = 0; // 0 bricht die Stosslueftung ab
+            }
+            break;
+
+        case FAN_KoCtrlValue:
+            if (_isMaster)
+            {
+                // Absicht, auch wenn der Name hier irrefuehrend aussieht: saemtliche DPT 9.x
+                // benutzen dasselbe 2-Byte-Gleitkommaformat und unterscheiden sich nur in der
+                // Einheit. Welche Groesse tatsaechlich anliegt (CO2 in ppm, Feuchte in Prozent),
+                // waehlt der Parameter "Regelgroesse" ueber die ComObjectRef aus. Zum Dekodieren
+                // ist der konkrete Subtyp deshalb gleichgueltig - 9.001 steht hier
+                // stellvertretend fuer die gesamte Familie.
+                _ctrlValue = (float)ko.value(DPT_Value_Common_Temperature);
+                _ctrlValueSeen = true;
+            }
+            break;
+
+        case FAN_KoAck:
+            _blocked = false;
+            _emptyWindows = 0;
+            _invalidValue = false;
+            break;
+
+        case FAN_KoSuspendSet:
         {
-            bool on = ko.value(DPT_Switch);
-            _fan.setFullControlPower(on);
+            // Das Objekt heisst "Suspendieren", also schaltet 1 die Suspendierung EIN
+            // und 0 nimmt den Kanal wieder in Betrieb.
+            const bool suspend = (bool)ko.value(DPT_Enable);
+            if (_suspended != suspend)
+            {
+                _suspended = suspend;
+                _persistDirty = true;
+            }
             break;
         }
-        case FAN_KoCH_FullControlSpeed:
-        {
-            uint8_t percent = ko.value(DPT_Scaling);
-            _fan.setFullControlSpeed(percent);
-            KoFAN_CH_FullControlSpeedFeedback.value(percent, DPT_Scaling);
+
+        default:
             break;
+    }
+}
+
+// ===========================================================================
+// Rechnen
+// ===========================================================================
+
+uint8_t FanChannel::controlOutput() const
+{
+    // P-Regler: unterhalb des Sollwerts Grundlast, darueber linear bis zur Maximalleistung.
+    // Bewusst ohne I-Anteil - Lueftung ist traege, ein Integrator brachte nur Ueberschwingen.
+    const uint8_t base = ParamFAN_fCtrlBase;
+    const uint8_t maxOut = ParamFAN_fCtrlMax > base ? ParamFAN_fCtrlMax : base;
+
+    if (!_ctrlValueSeen) return base; // noch kein Istwert empfangen
+
+    const float setpoint = (float)ParamFAN_fCtrlSetpoint;
+    const float band = (float)ParamFAN_fCtrlBand;
+    if (band <= 0.0f) return base;
+
+    if (_ctrlValue <= setpoint) return base;
+
+    const float ratio = (_ctrlValue - setpoint) / band;
+    const float out = base + ratio * (float)(maxOut - base);
+
+    if (out >= (float)maxOut) return maxOut;
+    return (uint8_t)(out + 0.5f);
+}
+
+uint8_t FanChannel::groupPower() const
+{
+    // Die Gruppenvorgabe erzeugt nur der Master; der Slave bekommt sie fertig geliefert.
+    if (!_isMaster) return _powerSet;
+
+    switch ((Fan::SetpointSource)ParamFAN_fSetpointSource)
+    {
+        case Fan::SetpointSource::Fixed: return ParamFAN_fFixedPower;
+        case Fan::SetpointSource::InternalControl: return controlOutput();
+        default: return _powerSet;
+    }
+}
+
+uint8_t FanChannel::targetPower() const
+{
+    if (_masterTimeout) return 0;
+
+    uint8_t group = groupPower();
+
+    // Stosslueftung ist Masterfunktion: sie hebt die Gruppenvorgabe an.
+    if (_isMaster && _boostUntil != 0 && (int32_t)(_boostUntil - millis()) > 0)
+        group = ParamFAN_fBoostLevel;
+
+    const uint16_t scaled = (uint16_t)group * ParamFAN_fShare / 100;
+    return scaled > 100 ? 100 : (uint8_t)scaled;
+}
+
+uint8_t FanChannel::powerToDrive(uint8_t power) const
+{
+    if (power == 0) return 0;
+
+    const bool dirB = (_direction == Fan::Direction::B);
+    uint8_t minVal = dirB ? ParamFAN_fMinB : ParamFAN_fMinA;
+    uint8_t maxVal = dirB ? ParamFAN_fMaxB : ParamFAN_fMaxA;
+    if (maxVal < minVal) maxVal = minVal;
+
+    const uint32_t span = (uint32_t)(maxVal - minVal);
+    uint32_t drive = minVal + span * power / 100;
+    if (drive > 100) drive = 100;
+    return (uint8_t)drive;
+}
+
+Fan::Direction FanChannel::desiredDirection() const
+{
+    if (_type != Fan::ChannelType::Reversible) return Fan::Direction::A;
+
+    switch (_dirMode)
+    {
+        case Fan::DirMode::OnlyA: return Fan::Direction::A;
+        case Fan::DirMode::OnlyB: return Fan::Direction::B;
+        default: break;
+    }
+
+    // Reversierend: Richtung ergibt sich aus Zuordnung und Taktzustand.
+    // Der Master erzeugt den Takt und ist damit die Bezugsphase - "Gegenphase" gibt es fuer ihn
+    // nicht. In der ETS ist der Parameter beim Master ausgeblendet; hier wird zusaetzlich ein
+    // eventuell noch gespeicherter Altwert uebergangen.
+    const bool counterPhase = _isMaster ? false : (bool)ParamFAN_fPhase;
+    const bool bDirection = (_tact != counterPhase);
+    return bDirection ? Fan::Direction::B : Fan::Direction::A;
+}
+
+int32_t FanChannel::rpmToFlow(uint16_t rpm) const
+{
+    const bool dirB = (_direction == Fan::Direction::B);
+
+    // Kennlinie A ist die Pflichtkennlinie, B ist optional. Reversierluefter foerdern in
+    // beide Richtungen praktisch gleich viel (ebm-papst AxiRev 126: die Kennlinien liegen
+    // uebereinander), deshalb genuegt in der Praxis eine einzige Kennlinie fuer beide
+    // Richtungen. Nur wenn B tatsaechlich gepflegt ist, wird sie auch benutzt.
+    // Ohne diesen Rueckfall lieferte Richtung B bei symmetrischer Konfiguration 0 statt des
+    // negativen Wertes.
+    const bool useB = dirB && (ParamFAN_fCurveB_RpmM > 0);
+
+    const uint16_t r1 = useB ? ParamFAN_fCurveB_Rpm1 : ParamFAN_fCurveA_Rpm1;
+    const uint16_t f1 = useB ? ParamFAN_fCurveB_Fl1 : ParamFAN_fCurveA_Fl1;
+    const uint16_t r2 = useB ? ParamFAN_fCurveB_Rpm2 : ParamFAN_fCurveA_Rpm2;
+    const uint16_t f2 = useB ? ParamFAN_fCurveB_Fl2 : ParamFAN_fCurveA_Fl2;
+    const uint16_t rM = useB ? ParamFAN_fCurveB_RpmM : ParamFAN_fCurveA_RpmM;
+    const uint16_t fM = useB ? ParamFAN_fCurveB_FlM : ParamFAN_fCurveA_FlM;
+
+    if (rM == 0) return 0; // Kennlinie nicht hinterlegt (K-10)
+
+    uint32_t flow;
+    if (rpm >= rM)
+    {
+        flow = fM; // keine Extrapolation, es wird begrenzt (K-9)
+    }
+    else if (r2 > 0 && rpm >= r2)
+    {
+        flow = f2 + (uint32_t)(fM - f2) * (rpm - r2) / (rM - r2);
+    }
+    else if (r1 > 0 && rpm >= r1)
+    {
+        flow = f1 + (uint32_t)(f2 - f1) * (rpm - r1) / (r2 - r1);
+    }
+    else
+    {
+        // Vom impliziten Nullpunkt (0,0) zum ersten hinterlegten Punkt
+        const uint16_t rTo = (r1 > 0) ? r1 : ((r2 > 0) ? r2 : rM);
+        const uint16_t fTo = (r1 > 0) ? f1 : ((r2 > 0) ? f2 : fM);
+        flow = (rTo == 0) ? 0 : (uint32_t)fTo * rpm / rTo;
+    }
+
+    // Vorzeichen: positiv = Zuluft. Richtung A gilt als Zuluft, Invertieren dreht die Konvention.
+    bool negative = dirB;
+    if (ParamFAN_fFlowInvert) negative = !negative;
+
+    // DPT 13.002 hat die Auflaesung 0,0001 m3/h -> Rohwert ist m3/h * 10000.
+    const int32_t raw = (int32_t)flow * 10000;
+    return negative ? -raw : raw;
+}
+
+Fan::Fault FanChannel::activeFault() const
+{
+    if (!_enableLatched) return Fan::Fault::EnableMissing;
+    if (_masterTimeout) return Fan::Fault::MasterTimeout;
+    if (_configFault) return Fan::Fault::Config;
+    if (_invalidValue) return Fan::Fault::InvalidValue;
+    if (_blocked) return Fan::Fault::NoRotation;
+    if (_suspended) return Fan::Fault::MonitoringSuspended;
+    return Fan::Fault::None;
+}
+
+// ===========================================================================
+// Ablauf
+// ===========================================================================
+
+void FanChannel::updateEnable()
+{
+    const uint16_t watch = ParamFAN_fEnableWatchTime;
+    if (watch == 0) return; // Ueberwachung abgeschaltet
+
+    // Solange die Freigabe nie empfangen wurde, ist das Objekt offensichtlich nicht verknuepft
+    // und die Anlage laeuft ohne Freigabe-Konzept. Nach dem ersten Telegramm bleibt die
+    // Ueberwachung dauerhaft aktiv, auch ueber Neustarts hinweg (E-1f, siehe restore()).
+    if (!_enableWatchRunning) return;
+
+    if (_enableLatched && (millis() - _lastEnableSeen) > (uint32_t)watch * 60000)
+    {
+        _enableLatched = false;
+        _persistDirty = true;
+        logInfoP("Freigabe-Ueberwachungszeit abgelaufen, gesperrt");
+    }
+}
+
+void FanChannel::updateRole()
+{
+    if (_isMaster) return;
+
+    // Ueberwachungszeit in Sekunden: sie muss unterhalb einer Zykluszeit bleiben, sonst
+    // foerdert ein reversierender Knoten ohne Takt so lange in eine Richtung, dass die
+    // Gebaeudebilanz kippt, bevor die Abschaltung greift. In Minuten war das nicht darstellbar.
+    const uint16_t watch = ParamFAN_fMasterWatchTime;
+    if (watch == 0 || _lastMasterSeen == 0) return;
+
+    // Bis zum Ablauf gilt der letzte Zustand, danach abschalten und melden.
+    if (!_masterTimeout && (millis() - _lastMasterSeen) > (uint32_t)watch * 1000)
+    {
+        _masterTimeout = true;
+        logInfoP("Lebenszeichen des Masters ausgeblieben");
+    }
+}
+
+void FanChannel::applyOutput()
+{
+    const uint32_t now = millis();
+    const uint8_t power = targetPower();
+    const bool wantRun = isActive() && !_configFault && _enableLatched && !_suspended && power > 0;
+    const Fan::Direction want = desiredDirection();
+
+    switch (_state)
+    {
+        case Fan::State::Off:
+            if (wantRun)
+            {
+                _direction = want;
+                _state = (ParamFAN_fPulseLevel > 0 && ParamFAN_fPulseTime > 0)
+                             ? Fan::State::StartPulse
+                             : Fan::State::Running;
+                _stateSince = now;
+            }
+            break;
+
+        case Fan::State::StartPulse:
+            if (!wantRun)
+            {
+                _state = Fan::State::Off;
+                _stateSince = now;
+            }
+            else if (want != _direction)
+            {
+                _pendingDirection = want;
+                _state = Fan::State::DeadTime;
+                _stateSince = now;
+            }
+            else if ((now - _stateSince) >= ParamFAN_fPulseTime)
+            {
+                _state = Fan::State::Running;
+                _stateSince = now;
+            }
+            break;
+
+        case Fan::State::Running:
+            if (!wantRun)
+            {
+                _state = Fan::State::Off;
+                _stateSince = now;
+            }
+            else if (want != _direction)
+            {
+                _pendingDirection = want;
+                _state = Fan::State::DeadTime;
+                _stateSince = now;
+            }
+            break;
+
+        case Fan::State::DeadTime:
+            if (!wantRun)
+            {
+                _state = Fan::State::Off;
+                _stateSince = now;
+            }
+            else if ((now - _stateSince) >= (uint32_t)ParamFAN_fDeadTime)
+            {
+                _direction = _pendingDirection;
+                _state = (ParamFAN_fPulseLevel > 0 && ParamFAN_fPulseTime > 0)
+                             ? Fan::State::StartPulse
+                             : Fan::State::Running;
+                _stateSince = now;
+            }
+            break;
+    }
+
+    switch (_state)
+    {
+        case Fan::State::Off:
+        case Fan::State::DeadTime:
+            _driveAct = 0;
+            _powerAct = 0;
+            _hw.stop();
+            break;
+
+        case Fan::State::StartPulse:
+            // S-2: der Puls ist eine Stellgroesse und erscheint nicht in der Leistungsrueckmeldung.
+            _driveAct = ParamFAN_fPulseLevel;
+            _powerAct = power;
+            _hw.drive(_direction, _driveAct);
+            break;
+
+        case Fan::State::Running:
+            _driveAct = powerToDrive(power);
+            _powerAct = power;
+            _hw.drive(_direction, _driveAct);
+            break;
+    }
+
+    // Blockiererkennung nach S-7/S-8: nur im Dauerlauf, nicht im Anlaufpuls oder Stillstand.
+    if (_hasTacho && _state == Fan::State::Running)
+    {
+        if ((now - _blockWindowStart) >= Fan::BlockWindowMs)
+        {
+            if (_lastPulseCount == _blockWindowPulses)
+            {
+                if (_emptyWindows < 0xFF) _emptyWindows++;
+                if (_emptyWindows >= Fan::BlockWindowsToFault && !_blocked)
+                {
+                    _blocked = true;
+                    logErrorP("Angesteuert, aber keine Drehzahl");
+                }
+            }
+            else
+            {
+                _emptyWindows = 0;
+            }
+            _blockWindowStart = now;
+            _blockWindowPulses = _lastPulseCount;
         }
-        case FAN_KoCH_FullControlDirection:
+    }
+    else
+    {
+        _blockWindowStart = now;
+        _blockWindowPulses = _lastPulseCount;
+        _emptyWindows = 0;
+    }
+
+    // Betriebsstunden
+    if ((now - _lastSecondTick) >= 1000)
+    {
+        _lastSecondTick += 1000;
+        if (_driveAct > 0) _runSeconds++;
+    }
+}
+
+void FanChannel::runMaster()
+{
+    if (!_isMaster) return;
+
+    const uint32_t now = millis();
+
+    // Taktgeber
+    if (_type == Fan::ChannelType::Reversible)
+    {
+        const uint32_t cycleMs = (uint32_t)ParamFAN_fCycleTime * 1000;
+        if (cycleMs > 0 && (now - _cycleStarted) >= cycleMs)
         {
-            uint8_t dir = ko.value(DPT_Switch);
-            _fan.setFullControlDirection(dir);
-            break;
+            _tact = !_tact;
+            _cycleStarted = now;
+            KoFAN_Tact.value(_tact, DPT_Bool);
+            KoFAN_CycleRest.value((uint16_t)ParamFAN_fCycleTime, DPT_TimePeriodSec);
+        }
+    }
+
+    // Lebenszeichen; im selben Zyklus Takt, Leistung und Richtungsart erneut senden,
+    // damit ein zurueckkehrender Knoten ohne Leseweg wieder mitlaeuft.
+    const uint32_t gapMs = (uint32_t)ParamFAN_fMasterSendGap * 60000;
+    if (gapMs > 0 && (now - _lastMasterSend) >= gapMs)
+    {
+        _lastMasterSend = now;
+
+        uint8_t group = groupPower();
+        if (_boostUntil != 0 && (int32_t)(_boostUntil - now) > 0)
+            group = ParamFAN_fBoostLevel;
+
+        KoFAN_AliveGroup.value(true, DPT_State);
+        KoFAN_PowerGroup.value(group, DPT_Scaling);
+
+        if (_type == Fan::ChannelType::Reversible)
+        {
+            KoFAN_Tact.value(_tact, DPT_Bool);
+
+            // Bei fester Vorgabe verteilt der Master die Richtungsart selbst; kommt sie ueber
+            // das KO, liegt sie ohnehin schon fuer alle auf derselben Gruppenadresse.
+            if ((Fan::DirModeSel)ParamFAN_fDirModeSel != Fan::DirModeSel::ViaKo)
+                KoFAN_DirMode.value((uint8_t)_dirMode, DPT_Value_1_Ucount);
         }
     }
 }
 
-void FanChannel::timerCallback()
+// ===========================================================================
+// Senden
+// ===========================================================================
+
+bool FanChannel::passesDeadband(int32_t value, int32_t lastSent, uint8_t percentBand, uint16_t absBand) const
 {
-    int16_t timeractive = 0;
-    KoFAN_CH_TimerFeedback.value(timeractive, DPT_State);
+    if (lastSent == INT32_MIN) return true; // noch nie gesendet
+
+    const int32_t diff = (value > lastSent) ? (value - lastSent) : (lastSent - value);
+    if (diff == 0) return false;
+
+    // Relativ ODER absolut: der absolute Sockel wirkt dort, wo die relative Schwelle
+    // in der Naehe von 0 beliebig klein wuerde.
+    if (absBand > 0 && diff >= (int32_t)absBand) return true;
+
+    if (percentBand > 0)
+    {
+        const int32_t ref = (lastSent < 0) ? -lastSent : lastSent;
+        if (ref > 0 && diff * 100 >= ref * (int32_t)percentBand) return true;
+    }
+
+    return (percentBand == 0 && absBand == 0);
+}
+
+void FanChannel::publish()
+{
+    const uint32_t now = millis();
+    const uint32_t minGapMs = (uint32_t)ParamFAN_fMinSendGap * 1000;
+
+    if (_powerAct != _lastSentPower)
+    {
+        _lastSentPower = _powerAct;
+        KoFAN_PowerAct.value(_powerAct, DPT_Scaling);
+        KoFAN_Running.value(_driveAct > 0, DPT_State);
+        if (_type == Fan::ChannelType::Reversible)
+            KoFAN_DirAct.value(_direction == Fan::Direction::B, DPT_Bool);
+    }
+
+    const uint8_t fault = (uint8_t)activeFault();
+    if (fault != _lastSentFault)
+    {
+        _lastSentFault = fault;
+        KoFAN_Fault.value(fault != 0 && fault != (uint8_t)Fan::Fault::MonitoringSuspended, DPT_Alarm);
+        KoFAN_FaultCode.value(fault, DPT_Value_1_Ucount);
+    }
+
+    if (_hasTacho)
+    {
+        const int32_t rpm = _rpm;
+        if ((minGapMs == 0 || (now - _lastSentRpmAt) >= minGapMs) &&
+            passesDeadband(rpm, _lastSentRpm, ParamFAN_fRpmBandPct, ParamFAN_fRpmBandAbs))
+        {
+            _lastSentRpm = rpm;
+            _lastSentRpmAt = now;
+            KoFAN_Rpm.value((uint16_t)rpm, DPT_Value_2_Ucount);
+        }
+
+        if (ParamFAN_fCurveA_RpmM > 0)
+        {
+            const int32_t flow = rpmToFlow(_rpm);
+            // Totband in m3/h, der Rohwert ist um 10000 skaliert.
+            if ((minGapMs == 0 || (now - _lastSentFlowAt) >= minGapMs) &&
+                passesDeadband(flow / 10000, _lastSentFlow / 10000,
+                               ParamFAN_fFlowBandPct, ParamFAN_fFlowBandAbs))
+            {
+                _lastSentFlow = flow;
+                _lastSentFlowAt = now;
+                KoFAN_Flow.value(flow, DPT_FlowRate_m3_per_h);
+            }
+        }
+    }
+}
+
+void FanChannel::updateDiagnostics()
+{
+    // Diese vier Werte werden ausschliesslich ins KO geschrieben, nie gesendet. Damit
+    // beantwortet das Geraet eine Leseanforderung mit dem aktuellen Stand, ohne dafuer
+    // zyklisch Bustelegramme zu erzeugen.
+    const uint32_t now = millis();
+
+    if (!_publishedOnce)
+    {
+        _publishedOnce = true;
+        _lastRunHoursWrite = now;
+        _lastCycleRestWrite = now;
+        _lastWrittenSuspended = _suspended ? 1 : 0;
+        KoFAN_IsSuspended.valueNoSend(_suspended, DPT_State);
+        KoFAN_RunHours.valueNoSend(_runSeconds / 3600, DPT_Value_4_Ucount);
+        if (!_isMaster)
+        {
+            _lastWrittenMasterOk = _masterTimeout ? 0 : 1;
+            KoFAN_MasterOk.valueNoSend(!_masterTimeout, DPT_State);
+        }
+    }
+
+    // Betriebsstunden bewegen sich langsam - alle 30 Minuten nachfuehren genuegt.
+    if ((now - _lastRunHoursWrite) >= Fan::RunHoursWriteMs)
+    {
+        _lastRunHoursWrite = now;
+        KoFAN_RunHours.valueNoSend(_runSeconds / 3600, DPT_Value_4_Ucount);
+    }
+
+    // Die Master-Erreichbarkeit prueft updateRole() ohnehin in jedem Durchlauf; hier folgt
+    // nur das Objekt dem geprueften Zustand.
+    if (!_isMaster)
+    {
+        const uint8_t ok = _masterTimeout ? 0 : 1;
+        if (ok != _lastWrittenMasterOk)
+        {
+            _lastWrittenMasterOk = ok;
+            KoFAN_MasterOk.valueNoSend(ok != 0, DPT_State);
+        }
+    }
+
+    // Die Suspendierung aendert sich nicht von selbst, sondern nur durch ein Telegramm auf
+    // "Suspendieren" - deshalb kein Intervall, sondern ein Abgleich beim Wechsel.
+    const uint8_t suspended = _suspended ? 1 : 0;
+    if (suspended != _lastWrittenSuspended)
+    {
+        _lastWrittenSuspended = suspended;
+        KoFAN_IsSuspended.valueNoSend(_suspended, DPT_State);
+    }
+
+    // Restzeit bis zum naechsten Richtungswechsel.
+    if (_isMaster && _type == Fan::ChannelType::Reversible &&
+        (now - _lastCycleRestWrite) >= Fan::CycleRestWriteMs)
+    {
+        _lastCycleRestWrite = now;
+        const uint32_t cycleMs = (uint32_t)ParamFAN_fCycleTime * 1000;
+        const uint32_t elapsed = now - _cycleStarted;
+        const uint16_t rest = (cycleMs > elapsed) ? (uint16_t)((cycleMs - elapsed) / 1000) : 0;
+        KoFAN_CycleRest.valueNoSend(rest, DPT_TimePeriodSec);
+    }
+}
+
+void FanChannel::loop()
+{
+    if (!isActive()) return;
+
+    updateEnable();
+    updateRole();
+    applyOutput();
+    runMaster();
+    publish();
+    updateDiagnostics();
+}
+
+void FanChannel::setMeasuredRpm(uint16_t rpm, uint32_t pulseCount)
+{
+    _rpm = rpm;
+    _lastPulseCount = pulseCount;
 }

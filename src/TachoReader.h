@@ -8,6 +8,10 @@ public:
     void update();          // call periodically from core 1
     uint16_t getRPM();      // safe to call from core 0
 
+    // Monotoner Pulszaehler fuer die Blockiererkennung: sie fragt nicht nach der Drehzahl,
+    // sondern danach, ob im Fenster ueberhaupt ein Puls kam.
+    uint32_t getPulseCount() const { return _pulseCount; }
+
     bool isEnabled() const { return _pin != 0xFF; }
 
 private:

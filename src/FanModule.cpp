@@ -1,131 +1,194 @@
 #include "FanModule.h"
-#include "IFanHardware.h"
-#include "hardware.h"
 
+FanModule openknxFanModule;
 
-const std::string FanModule::name() { return "FanModule"; }
+// Boards ohne Tachoeingang definieren die Pins nicht.
+#ifndef FAN1_TACHO_PIN
+    #define FAN1_TACHO_PIN -1
+#endif
+#ifndef FAN2_TACHO_PIN
+    #define FAN2_TACHO_PIN -1
+#endif
 
-const std::string FanModule::version() {
-  return std::to_string(FAN_ModuleVersion);
+namespace
+{
+    struct BoardPins
+    {
+        int8_t drive;
+        int8_t driveMirror;
+        int8_t sw;
+        int8_t tacho;
+    };
+
+    // Reihenfolge entspricht den ETS-Kanaelen. Der Ansteuerpfad traegt Drehzahl und Richtung
+    // gemeinsam; der Spiegel-Ausgang fuehrt dasselbe Signal ein zweites Mal heraus, fuer den
+    // zweiten Luefter eines Maico-Paares. Boards mit nur einem Ausgang geben -1 an.
+    const BoardPins boardPins[2] = {
+        {FAN1_S1_PWM_PIN, FAN1_S2_PWM_PIN, FAN1_SW_PIN, FAN1_TACHO_PIN},
+        {FAN2_S1_PWM_PIN, FAN2_S2_PWM_PIN, FAN2_SW_PIN, FAN2_TACHO_PIN},
+    };
 }
 
-void FanModule::setup(bool configured) {
-  if(ParamFAN_StatusLED == 1) {
-    _fan1Hw.setDigital(STATUS_LED_PIN, true);
-  } else {
-    _fan1Hw.setDigital(STATUS_LED_PIN, false);
-  }
+// ===========================================================================
+// Setup
+// ===========================================================================
 
-  // Read global hardware config: 0=1x Maico PPB30, 1=2x Fawas AirSolitaire
-  uint8_t hwConfig = ParamFAN_HardwareConfig;
-  openknx.logger.logWithPrefixAndValues("FanMod", "HardwareConfig=%d (0=Maico, 1=Fawas)", hwConfig);
+void FanModule::setup(bool configured)
+{
+    // Geraeteweit: die PWM-Frequenz ist auf dem RP2040 keine Eigenschaft des einzelnen Pins.
+    // Ohne gueltige Konfiguration ein unauffaelliger Vorgabewert.
+    RP2040FanHardware::configurePwm(configured ? ParamFAN_PwmFreq : 1000);
 
-  if (hwConfig == 1) {
-    // 2x Fawas AirSolitaire — one fan per HW channel
-    _fan1 = new FawasAirSolitaire(_fan1Hw, FAN1_S1_PWM_PIN, FAN1_SW_PIN);
-    _fan2 = new FawasAirSolitaire(_fan2Hw, FAN2_S1_PWM_PIN, FAN2_SW_PIN);
-  } else {
-    // 1x Maico PPB30 — S1=FAN1_PWM, S2=FAN2_PWM (both HW channels for one push-pull unit)
-    _fan1 = new MaicoPPB30(_fan1Hw, FAN1_S1_PWM_PIN, FAN2_S1_PWM_PIN, FAN1_SW_PIN);
-    // fan2 not used in Maico mode — create dummy with invalid pins
-    _fan2 = new MaicoPPB30(_fan2Hw, FAN2_S1_PWM_PIN, FAN2_S2_PWM_PIN, FAN2_SW_PIN);
-  }
+    // Die Polaritaet ist eine Board-Eigenschaft und stellt bei diesen Luftern die
+    // Foerderrichtung auf den Kopf, wenn sie falsch ist. Deshalb beim Start protokollieren.
+#ifdef FAN_PWM_ACTIVE_LOW
+    logInfoP("PWM-Ausgang invertiert (Open-Drain mit Pullup)");
+#else
+    logInfoP("PWM-Ausgang nicht invertiert");
+#endif
 
-  openknx.logger.logWithPrefixAndValues("FanMod", "Fan1 pins: PWM=%d SW=%d, Fan2 pins: PWM=%d SW=%d",
-    FAN1_S1_PWM_PIN, FAN1_SW_PIN, FAN2_S1_PWM_PIN, FAN2_SW_PIN);
+    for (uint8_t i = 0; i < FAN_ChannelCount; i++)
+    {
+        const BoardPins &pins = boardPins[i];
 
-  _channel[0] = new FanChannel(0, *_fan1);
-  _channel[1] = new FanChannel(1, *_fan2);
+        // Die Hardware wird immer zugeordnet, damit die Ausgaenge auch bei einem
+        // deaktivierten Kanal definiert in der Mittelstellung stehen.
+        _hw[i].init(pins.drive, pins.driveMirror, pins.sw);
 
-  for (int i = 0; i < FAN_ChannelCount; i++) {
-    _channel[i]->setup(configured);
-  }
+        if (!configured) continue;
 
-  _setupComplete = true;
+        FanChannel *channel = new FanChannel(i, _hw[i]);
+        channel->setup();
+
+        if (!channel->isActive())
+        {
+            delete channel;
+            continue;
+        }
+
+        _channel[i] = channel;
+    }
+
+    _setupComplete = true;
 }
 
 #ifdef OPENKNX_DUALCORE
-void FanModule::setup1() {
-  while (!_setupComplete)
-    ; // wait for core 0 to finish setup
+void FanModule::setup1(bool configured)
+{
+    // Auf das Setup von Core 0 warten, damit die Kanalkonfiguration steht.
+    while (!_setupComplete)
+        delay(1);
 
-#ifdef FAN1_TACHO_PIN
-  _tacho[0].begin(FAN1_TACHO_PIN);
-#endif
-#ifdef FAN2_TACHO_PIN
-  _tacho[1].begin(FAN2_TACHO_PIN);
-#endif
-}
+    if (!configured) return;
 
-void FanModule::loop1() {
-  for (int i = 0; i < FAN_ChannelCount; i++) {
-    _tacho[i].update();
-  }
-}
-#endif
-
-void FanModule::loop() {
-  if (!openknx.afterStartupDelay())
-    return;
-
-  bool anyFanRunning = false;
-  for (int i = 0; i < FAN_ChannelCount; i++) {
-    _channel[i]->loop();
-    if (_channel[i]->getFanSpeed() > 0) {
-      anyFanRunning = true;
+    for (uint8_t i = 0; i < FAN_ChannelCount; i++)
+    {
+        if (_channel[i] == nullptr) continue;
+        if (boardPins[i].tacho < 0) continue;
+        _tacho[i].begin((uint8_t)boardPins[i].tacho);
     }
-  }
+}
 
-  if (ParamFAN_StatusLED == 2) {
-    _fan1Hw.setDigital(STATUS_LED_PIN, anyFanRunning);
-  } else {
-    _fan1Hw.setDigital(STATUS_LED_PIN, false);
-  }
+void FanModule::loop1(bool configured)
+{
+    if (!configured) return;
 
-  // Update RPM KOs every second
-  if (delayCheck(_lastRpmUpdate, 1000)) {
-    for (int i = 0; i < FAN_ChannelCount; i++) {
-      if (_tacho[i].isEnabled()) {
-        // Temporarily set _channelIndex for the KO macro
-        uint8_t _channelIndex = i;
-        KoFAN_CH_TachoRPM.value(_tacho[i].getRPM(), DPT_Value_2_Ucount);
-      }
+    for (uint8_t i = 0; i < FAN_ChannelCount; i++)
+        if (_tacho[i].isEnabled()) _tacho[i].update();
+}
+#endif
+
+// ===========================================================================
+// Ablauf
+// ===========================================================================
+
+void FanModule::processAfterStartupDelay()
+{
+    // Erst ab hier darf ein Luefter anlaufen. Empfangene Werte werden vorher bereits
+    // entgegengenommen, sodass der Start sofort mit aktuellen Vorgaben erfolgt.
+    _startupDelayDone = true;
+}
+
+void FanModule::loop(bool configured)
+{
+    if (!configured) return;
+    if (!_startupDelayDone) return;
+
+    const uint32_t now = millis();
+    const bool takeRpm = (now - _lastTachoUpdate) >= Fan::TachoUpdateMs;
+    if (takeRpm) _lastTachoUpdate = now;
+
+    for (uint8_t i = 0; i < FAN_ChannelCount; i++)
+    {
+        FanChannel *channel = _channel[i];
+        if (channel == nullptr) continue;
+
+        if (takeRpm)
+            channel->setMeasuredRpm(_tacho[i].getRPM(), _tacho[i].getPulseCount());
+
+        channel->loop();
+
+        // Freigabe-Latch und Suspendierung muessen einen Spannungsausfall ueberleben,
+        // deshalb bei Aenderung sofort sichern und nicht auf das periodische Speichern warten.
+        if (channel->consumePersistDirty())
+            openknx.flash.save(true);
     }
-    _lastRpmUpdate = millis();
-  }
 }
 
-void FanModule::processInputKo(GroupObject &ko) {
-  for (int i = 0; i < FAN_ChannelCount; i++) {
-    _channel[i]->processInputKo(ko);
-  }
+void FanModule::processInputKo(GroupObject &ko)
+{
+    const int8_t index = FAN_KoCalcChannel(ko.asap());
+    if (index < 0 || index >= FAN_ChannelCount) return;
+
+    FanChannel *channel = _channel[index];
+    if (channel != nullptr) channel->processInputKo(ko);
 }
 
-// void FanModule::loop(bool configured)
-// {
-//     for(int i = 0; i < FAN_ChannelCount; i++)
-//     {
-//         channel[i]->loop(configured);
-//     }
-// }
-
-void FanModule::processAfterStartupDelay() {
-  for (int i = 0; i < FAN_ChannelCount; i++) {
-    _channel[i]->resetFan();
-  }
+void FanModule::processBeforeRestart()
+{
+    writeFlash();
 }
 
-bool FanModule::sendReadRequest(GroupObject &ko) {
-  // ensure, that we do not send too many read requests at the same time
-  if (delayCheck(readRequestDelay, 300)) // 3 per second
-  {
-    // we handle input KO and we send only read requests, if KO is uninitialized
-    if (!ko.initialized())
-      ko.requestObjectRead();
-    readRequestDelay = delayTimerInit();
-    return true;
-  }
-  return false;
+// ===========================================================================
+// Persistenz
+// ===========================================================================
+
+uint16_t FanModule::flashSize()
+{
+    // Versionsbyte plus je Kanal ein Flagbyte und die Betriebssekunden.
+    return 1 + FAN_ChannelCount * 5;
 }
 
-FanModule openknxFanModule;
+void FanModule::writeFlash()
+{
+    openknx.flash.writeByte(FlashVersion);
+
+    for (uint8_t i = 0; i < FAN_ChannelCount; i++)
+    {
+        FanChannel::PersistentState state = {0x00, 0};
+        if (_channel[i] != nullptr) state = _channel[i]->persistentState();
+
+        openknx.flash.writeByte(state.flags);
+        openknx.flash.writeInt(state.runSeconds);
+    }
+}
+
+void FanModule::readFlash(const uint8_t *data, const uint16_t size)
+{
+    if (size < flashSize()) return; // noch nichts oder ein aelteres Layout gespeichert
+
+    if (openknx.flash.readByte() != FlashVersion)
+    {
+        logInfoP("Gespeicherte Daten haben eine andere Version, werden verworfen");
+        return;
+    }
+
+    for (uint8_t i = 0; i < FAN_ChannelCount; i++)
+    {
+        FanChannel::PersistentState state;
+        state.flags = openknx.flash.readByte();
+        state.runSeconds = openknx.flash.readInt();
+
+        if (_channel[i] != nullptr) _channel[i]->restore(state);
+    }
+}

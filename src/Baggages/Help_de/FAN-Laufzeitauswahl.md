@@ -1,2 +1,0 @@
-### Timerkonfiguration: Laufzeitauswahl
-Durch das Kommunikationsobjekt "Timer aktivieren" kann der Lüfter für die gewählte Laufzeit mit der aktuell gewählten Geschwindigkeit im aktuellen Lüftungsmodus betrieben werden. Nach Ablauf des Timers schaltet sich der Lüfter ab. So kann man den Lüfter beispielsweise eine Stunde bei maximaler Geschwindikeit im Abluftmodus betreiben. 

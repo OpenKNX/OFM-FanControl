@@ -1,33 +1,35 @@
 #pragma once
 
 #include "IFanHardware.h"
-#include <Arduino.h>
-#include "pico/stdlib.h"
 
-class RP2040FanHardware : public IFanHardware {
-public:
-    RP2040FanHardware();
-    virtual ~RP2040FanHardware();
+/**
+ * @brief IFanHardware fuer RP2040: ein PWM-Ausgang je Knoten plus optionaler Lastschalter.
+ *
+ * Der PWM-Ausgang traegt Drehzahl und Richtung gemeinsam (siehe IFanHardware).
+ */
+class RP2040FanHardware : public IFanHardware
+{
+  public:
+    void init(int8_t pinDrive, int8_t pinDriveMirror, int8_t pinSwitch) override;
+    void setMidpoint(uint8_t percent) override { _midpoint = percent > 100 ? 100 : percent; }
+    void drive(Fan::Direction dir, uint8_t speedPercent) override;
+    void stop() override;
 
-    void init(uint8_t s1_pin, uint8_t s2_pin, uint8_t sw_pin) override;
-    void setPWM(uint8_t pin, int16_t value) override;
-    void setDigital(uint8_t pin, bool value) override;
-    void startDirectionTimer(long intervalMs, std::function<void()> callback) override;
-    void stopDirectionTimer() override;
-    void startOneShotTimer(long delayMs, std::function<void()> callback) override;
-    void stopOneShotTimer() override;
+    /**
+     * @brief PWM-Aufloesung und -Frequenz einmalig setzen.
+     *
+     * Wirkt global fuer den Core, deshalb ist die Frequenz ein geraeteweiter Parameter und
+     * nicht je Kanal einstellbar.
+     */
+    static void configurePwm(uint32_t freqHz);
 
-private:
-    static bool staticDirectionCallback(struct repeating_timer *t);
-    static int64_t staticTimeoutCallback(alarm_id_t id, void *user_data);
+  private:
+    void writeDuty(uint8_t dutyPercent);
 
-    struct repeating_timer _directionTimer;
-    bool _directionTimerActive = false;
-    std::function<void()> _directionCallback;
-    std::function<void()> _oneShotCallback;
-    alarm_id_t _oneShotAlarmID = 0;
-    bool _oneShotTimerActive = false;
-    
-    // PWM frequency from original Fan.h
-    const uint16_t pwmFreqHz = 10000; // 10kHz
+    int8_t _pinDrive = -1;
+    int8_t _pinDriveMirror = -1;
+    int8_t _pinSwitch = -1;
+    uint8_t _midpoint = 50;
+
+    static constexpr uint16_t PwmRange = 1000;
 };

@@ -1,64 +1,54 @@
 #pragma once
+
 #include <stdint.h>
-#include <functional>
+#include "FanTypes.h"
 
 /**
- * @brief Interface for hardware specific operations required by the Fan class.
- * This allows decoupling the logic from the actual hardware (GPIO, Timers),
- * enabling unit testing with mocks.
+ * @brief Ansteuerung eines Luefterknotens, entkoppelt von der konkreten Hardware.
+ *
+ * Die unterstuetzten Luefter (Maico PPB30, Fawas HST) tragen Drehzahl UND Foerderrichtung
+ * auf **einem** Ansteuerpfad: die Mittelstellung ist Stillstand, das eine Ende volle Leistung
+ * Richtung A, das andere volle Leistung Richtung B. Ein Maico enthaelt zwar zwei Luefter,
+ * die aber innerhalb des Geraetes immer gleich herum drehen und deshalb gemeinsam an einem
+ * Ausgang haengen.
+ *
+ * Daraus folgt die wichtigste Eigenschaft dieser Schnittstelle: **0 % Stellgroesse ist nicht
+ * "aus", sondern volle Leistung Richtung A.** Der sichere Zustand ist die Mittelstellung.
  */
-class IFanHardware {
-public:
+class IFanHardware
+{
+  public:
     virtual ~IFanHardware() = default;
 
     /**
-     * @brief Initialize the hardware pins.
-     * 
-     * @param s1_pin Pin for S1 PWM
-     * @param s2_pin Pin for S2 PWM
-     * @param sw_pin Pin for Switch
+     * @brief Pins zuordnen und die Ausgaenge in den sicheren Zustand bringen.
+     *
+     * @param pinDrive       Ansteuerpfad, traegt Drehzahl und Richtung
+     * @param pinDriveMirror zweiter Ausgang mit **identischem** Signal, < 0 wenn nicht vorhanden
+     * @param pinSwitch      Lastschalter, < 0 wenn nicht vorhanden
+     *
+     * Der Spiegel-Ausgang ist keine zweite Richtung, sondern dieselbe Ansteuerung ein zweites
+     * Mal: das MrSpieb-Board fuehrt je Knoten zwei Ausgaenge heraus, einen je Luefter eines
+     * Maico-Paares. Beide Luefter eines Geraetes drehen ohnehin immer gleich herum. Boards mit
+     * nur einem Ausgang (Reg1 Fan-Addon-X2) klemmen beide Luefter auf dieselbe Klemme, was der
+     * hochohmige PWM-Eingang der Luefter erlaubt.
      */
-    virtual void init(uint8_t s1_pin, uint8_t s2_pin, uint8_t sw_pin) = 0;
+    virtual void init(int8_t pinDrive, int8_t pinDriveMirror, int8_t pinSwitch) = 0;
 
     /**
-     * @brief Set PWM duty cycle for a specific pin.
-     * 
-     * @param pin The GPIO pin number.
-     * @param value The PWM value (0-1024 typically, depending on resolution).
+     * @brief Mittelstellung setzen (Stellgroesse bei Stillstand).
+     *
+     * 50 % entspricht einem reversierenden Luefter, 0 % einem gewoehnlichen Luefter,
+     * bei dem 0 aus und 100 volle Leistung bedeutet.
      */
-    virtual void setPWM(uint8_t pin, int16_t value) = 0;
+    virtual void setMidpoint(uint8_t percent) = 0;
 
     /**
-     * @brief Set digital output for a specific pin.
-     * 
-     * @param pin The GPIO pin number.
-     * @param value true for HIGH, false for LOW.
+     * @brief Drehzahl in der angegebenen Richtung ausgeben.
+     * @param speedPercent 0..100, bezogen auf die jeweilige Haelfte. 0 ergibt Stillstand.
      */
-    virtual void setDigital(uint8_t pin, bool value) = 0;
+    virtual void drive(Fan::Direction dir, uint8_t speedPercent) = 0;
 
-    /**
-     * @brief Start a repeating timer for direction switching.
-     * 
-     * @param intervalMs Interval in milliseconds.
-     * @param callback Function to call when timer expires.
-     */
-    virtual void startDirectionTimer(long intervalMs, std::function<void()> callback) = 0;
-
-    /**
-     * @brief Stop the repeating direction timer.
-     */
-    virtual void stopDirectionTimer() = 0;
-
-    /**
-     * @brief Start a one-shot timer.
-     * 
-     * @param delayMs Delay in milliseconds.
-     * @param callback Function to call when timer expires.
-     */
-    virtual void startOneShotTimer(long delayMs, std::function<void()> callback) = 0;
-
-    /**
-     * @brief Stop the one-shot timer if it is running.
-     */
-    virtual void stopOneShotTimer() = 0;
+    /** @brief Sicherer Zustand: Mittelstellung ausgeben und den Lastschalter oeffnen. */
+    virtual void stop() = 0;
 };
