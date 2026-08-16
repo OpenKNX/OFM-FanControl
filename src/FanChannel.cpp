@@ -12,8 +12,12 @@ FanChannel::FanChannel(uint8_t index, IFanHardware &hardware) : _hw(hardware)
 
 void FanChannel::setup()
 {
-    _type = (Fan::ChannelType)ParamFAN_fChannelType;
-    if (!isActive()) return;
+    // Wie viele Luefter es gibt, entscheidet der geraeteweite Zaehler - nicht ein Kanaltyp
+    // mit Wert "Deaktiviert". Die ersten N Kanaele sind aktiv.
+    _active = (_channelIndex < ParamFAN_FanCount);
+    if (!_active) return;
+
+    _type = (Fan::ChannelType)ParamFAN_fMode;
 
     _isMaster = ParamFAN_fIsMaster;
     _hasTacho = ParamFAN_fHasTacho;

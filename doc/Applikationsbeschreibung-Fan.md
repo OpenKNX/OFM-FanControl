@@ -29,6 +29,23 @@ wechselt mit dem Taktzustand, den der Master vorgibt.
 
 ## Allgemein
 
+<!-- DOC HelpContext="Anzahl Lüfter" -->
+### Anzahl Lüfter
+
+Wie viele Lüfter das Gerät steuert, einstellbar von 1 bis 8. Es werden genau so viele
+Lüfter-Reiter und Zeilen in der Kanalauswahl eingeblendet.
+
+Dieser Wert sagt nur, **wie viele** Lüfter es gibt. Welcher Art ein Lüfter ist, legt „Modus" auf
+seinem eigenen Reiter fest.
+
+> **Mehr Lüfter als Ausgänge:** Die Applikation ist auf bis zu 8 Lüfter ausgelegt, die
+> tatsächliche Zahl der Ausgänge bestimmt aber die Hardware. Stellt man mehr Lüfter ein, als das
+> Gerät treiben kann, laufen die überzähligen nicht — das Gerät meldet beim Start einen
+> Konfigurationsfehler und schreibt die vorhandene Zahl ins Log.
+
+Die Kommunikationsobjekte aller 8 möglichen Lüfter sind in der Applikation fest angelegt; ein
+kleinerer Wert blendet sie in der ETS aus, verschiebt aber keine Objektnummern.
+
 <!-- DOC HelpContext="PWM-Frequenz" -->
 ### PWM-Frequenz
 
@@ -44,23 +61,22 @@ Signal nicht mehr sauber auswertet, eine zu niedrige kann hörbar werden.
 
 ## Kanaldefinition
 
-<!-- DOC HelpContext="Kanaltyp" -->
-### Kanaltyp
+<!-- DOC HelpContext="Modus" -->
+### Modus
 
-Legt fest, ob und wie dieser Kanal existiert.
+Legt fest, wie dieser Lüfter gefahren wird.
 
-* **Deaktiviert** — der Kanal ist nicht bestückt. Es erscheint kein Kanalreiter und es werden
-  keine Kommunikationsobjekte angelegt.
-* **Nicht reversibel** — eine Förderrichtung. Es gibt keine Richtungs- und Taktobjekte.
-* **Reversibel** — zwei Förderrichtungen. Richtung und Takt sind verfügbar, die Stellgröße wird
-  je Richtung eingestellt.
+* **Nicht reversibel** — eine Förderrichtung. Es gibt keine Richtungs- und Taktobjekte, und die
+  Stellgröße wird gewöhnlich gefahren: 0 % ist Stillstand, 100 % volle Leistung.
+* **Reversibel** — zwei Förderrichtungen auf einem Ausgang. Richtung und Takt sind verfügbar,
+  Stellgröße Minimum und Maximum werden je Richtung eingestellt, und die Mittelstellung ist der
+  Stillstand.
 
-Der Kanaltyp wird **ausschließlich in der Kanalauswahl** eingestellt; auf dem Kanalreiter
-erscheint er bewusst nicht noch einmal.
+Der Modus gehört zum einzelnen Lüfter und steht deshalb hier, nicht in der Kanalauswahl. Wie
+viele Lüfter es überhaupt gibt, legt „Anzahl Lüfter" unter *Allgemein* fest.
 
-Ob die Hardware eine zweite Förderrichtung überhaupt unterstützt, hängt vom Board und von der
-eingestellten Mittelstellung ab; passt der Kanaltyp nicht dazu, meldet das Gerät einen
-Konfigurationsfehler.
+Ob die Hardware eine zweite Förderrichtung unterstützt, hängt vom Board und von der eingestellten
+Mittelstellung ab; passt beides nicht zusammen, meldet das Gerät einen Konfigurationsfehler.
 
 ## Rolle und Zuordnung
 

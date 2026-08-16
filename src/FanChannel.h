@@ -30,8 +30,8 @@ class FanChannel : public OpenKNX::Channel
     void loop();
     void processInputKo(GroupObject &ko);
 
-    /** true, wenn der Kanal in der ETS aktiviert ist (Kanaltyp != Deaktiviert). */
-    bool isActive() const { return _type != Fan::ChannelType::Disabled; }
+    /** true, wenn dieser Luefter laut geraeteweitem Zaehler "Anzahl Luefter" existiert. */
+    bool isActive() const { return _active; }
 
     /** Drehzahl aus der Messung auf Core 1 uebernehmen. */
     void setMeasuredRpm(uint16_t rpm, uint32_t pulseCount);
@@ -71,7 +71,8 @@ class FanChannel : public OpenKNX::Channel
     IFanHardware &_hw;
 
     // Konfiguration, in setup() eingelesen
-    Fan::ChannelType _type = Fan::ChannelType::Disabled;
+    bool _active = false;
+    Fan::ChannelType _type = Fan::ChannelType::NonReversible;
     bool _isMaster = false;
     bool _hasTacho = false;
     bool _configFault = false;

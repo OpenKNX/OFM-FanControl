@@ -4,12 +4,17 @@
 
 namespace Fan
 {
-    /** Kanaltyp, entspricht PT-FanChannelType in Fan.share.xml. */
+    /**
+     * Betriebsart des Luefters, entspricht PT-FanMode in Fan.templ.xml.
+     *
+     * Es gibt hier bewusst kein "Deaktiviert": wie viele Luefter es gibt, sagt der
+     * geraeteweite Zaehler "Anzahl Luefter" - und das ist eine andere Frage als die, welcher
+     * Art ein vorhandener Luefter ist.
+     */
     enum class ChannelType : uint8_t
     {
-        Disabled = 0,
-        NonReversible = 1,
-        Reversible = 2
+        NonReversible = 0,
+        Reversible = 1
     };
 
     /** Richtungsart, empfangen ueber KO "Richtungsart" (DPT 5.010). */
