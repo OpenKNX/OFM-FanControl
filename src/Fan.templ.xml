@@ -47,8 +47,10 @@
                 <Parameter Id="%AID%_UP-%TT%%CC%018" Name="f%C%CycleTime"       Offset="0" BitOffset="0" ParameterType="%AID%_PT-FanCycleTime" Text="Zykluszeit je Richtung" SuffixText=" s" Value="40" />
                 <Parameter Id="%AID%_UP-%TT%%CC%019" Name="f%C%EnableWatchTime" Offset="2" BitOffset="0" ParameterType="%AID%_PT-FanWatchMin" Text="Überwachungszeit Freigabe" SuffixText=" min  (0 = keine Überwachung)" Value="2" />
                 <!-- 1 Byte Reserve auf Offset 3 -->
-                <Parameter Id="%AID%_UP-%TT%%CC%020" Name="f%C%MasterWatchTime" Offset="4" BitOffset="0" ParameterType="%AID%_PT-FanWatchMin" Text="Überwachungszeit Master" SuffixText=" min  (0 = keine Überwachung)" Value="5" />
-                <!-- 1 Byte Reserve auf Offset 5 -->
+                <!-- In Sekunden, nicht in Minuten: die Zeit muss unter einer Zykluszeit bleiben
+                     (Vorgabe 40 s), sonst foerdert ein Knoten ohne Takt zu lange einseitig.
+                     Belegt Offset 4..5, die vormalige Reserve auf 5 ist damit verbraucht. -->
+                <Parameter Id="%AID%_UP-%TT%%CC%020" Name="f%C%MasterWatchTime" Offset="4" BitOffset="0" ParameterType="%AID%_PT-FanCycleTime" Text="Überwachungszeit Master" SuffixText=" s  (0 = keine Überwachung)" Value="35" />
               </Union>
 
               <!-- Stosslueftung (Masterfunktion) -->

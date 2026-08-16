@@ -326,6 +326,12 @@ Die Sperre ist selbsthaltend und übersteht einen Spannungsausfall. Sie wird aus
 ein empfangenes Freigabe-Telegramm aufgehoben — nicht durch Zeitablauf, nicht durch eine
 Quittierung und nicht durch Aus- und Einschalten.
 
+Die Überwachung beginnt mit dem ersten empfangenen Freigabe-Telegramm. Eine Anlage, die das
+Objekt nicht verknüpft, läuft also normal. Sobald das Objekt aber **einmal** gesendet hat, bleibt
+die Überwachung dauerhaft aktiv und läuft nach einem Neustart sofort wieder an — auch ohne neues
+Telegramm. Ein Gerät mit gespeicherter Freigabe sperrt damit nach Ablauf der Zeit, wenn die
+Buslinie abgezogen oder das freigebende Gerät ausgefallen ist.
+
 > **Hinweis:** KNX ist kein Sicherheitsbus. Für den Verbund mit einer Feuerstätte ist
 > üblicherweise ein fest verdrahteter, potentialfreier Kontakt gefordert. Der Busweg ist dann
 > eine Ergänzung, kein Ersatz. Die Festlegung trifft die zuständige Stelle.
@@ -339,9 +345,12 @@ Solange die Zeit nicht abgelaufen ist, behält der Slave bei ausbleibendem Leben
 letzten Zustand. Danach fährt er auf Leistung 0 und meldet Störung mit dem Fehlercode für
 Master-Timeout.
 
-Die Zeit sollte höchstens eine Zykluszeit betragen. Andernfalls fördert ein reversierender Knoten
-ohne Takt so lange in eine Richtung, dass die Gebäudebilanz merklich kippt, bevor die Abschaltung
-greift. **0 schaltet die Überwachung ab.**
+Die Zeit sollte höchstens eine Zykluszeit betragen — deshalb ist sie in Sekunden anzugeben.
+Andernfalls fördert ein reversierender Knoten ohne Takt so lange in eine Richtung, dass die
+Gebäudebilanz merklich kippt, bevor die Abschaltung greift. Die Vorgabe von 35 s liegt knapp
+unter der Vorgabe-Zykluszeit von 40 s; wird die Zykluszeit geändert, ist diese Zeit mitzuziehen.
+
+**0 schaltet die Überwachung ab.**
 
 <!-- DOC HelpContext="Sendeabstand Lebenszeichen" -->
 ### Sendeabstand Lebenszeichen

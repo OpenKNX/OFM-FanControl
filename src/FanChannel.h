@@ -16,7 +16,9 @@ class FanChannel : public OpenKNX::Channel
     /** Persistenter Teil des Kanalzustands. Wird von FanModule in den Flash geschrieben. */
     struct PersistentState
     {
-        uint8_t flags;         // Bit0 = Freigabe-Latch gesperrt, Bit1 = suspendiert
+        // Bit0 = Freigabe-Latch gesperrt, Bit1 = suspendiert,
+        // Bit2 = Freigabe wurde schon einmal empfangen (E-1f)
+        uint8_t flags;
         uint32_t runSeconds;   // Betriebssekunden
     };
 
@@ -86,7 +88,9 @@ class FanChannel : public OpenKNX::Channel
     uint8_t _driveAct = 0;      // ausgegebene Stellgroesse
     bool _tact = false;
     bool _suspended = false;
-    bool _enableLatched = true; // false = gesperrt (selbsthaltend)
+    bool _enableLatched = true;      // false = gesperrt (selbsthaltend)
+    bool _enableSeenEver = false;    // persistent: Freigabe-Objekt ist verknuepft (E-1f)
+    bool _enableWatchRunning = false; // Ueberwachungszeit laeuft
     bool _invalidValue = false;
     bool _masterTimeout = false;
     bool _persistDirty = false;

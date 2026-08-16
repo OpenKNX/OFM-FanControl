@@ -77,7 +77,9 @@ void FanChannel::setup()
 FanChannel::PersistentState FanChannel::persistentState() const
 {
     PersistentState s;
-    s.flags = (uint8_t)((_enableLatched ? 0 : 0x01) | (_suspended ? 0x02 : 0x00));
+    s.flags = (uint8_t)((_enableLatched ? 0 : 0x01) |
+                        (_suspended ? 0x02 : 0x00) |
+                        (_enableSeenEver ? 0x04 : 0x00));
     s.runSeconds = _runSeconds;
     return s;
 }
@@ -87,7 +89,19 @@ void FanChannel::restore(const PersistentState &state)
     // Bit0 gesetzt bedeutet: es lag eine Sperre an, die den Ausfall ueberlebt (E-1e).
     _enableLatched = (state.flags & 0x01) == 0;
     _suspended = (state.flags & 0x02) != 0;
+    _enableSeenEver = (state.flags & 0x04) != 0;
     _runSeconds = state.runSeconds;
+
+    // E-1f: war die Freigabe schon einmal verknuepft, laeuft die Ueberwachung ab dem Neustart
+    // weiter - ohne auf ein erstes Telegramm zu warten. Sonst liefe ein Geraet, das mit
+    // gespeicherter Freigabe startet und danach keine Telegramme mehr bekommt (abgezogene
+    // Buslinie, ausgefallener Druckwaechter), unbegrenzt weiter. Genau das soll das
+    // Ruhestromprinzip verhindern.
+    if (_enableSeenEver)
+    {
+        _enableWatchRunning = true;
+        _lastEnableSeen = millis();
+    }
 }
 
 // ===========================================================================
@@ -107,6 +121,16 @@ void FanChannel::processInputKo(GroupObject &ko)
         {
             const bool enabled = (bool)ko.value(DPT_Enable);
             _lastEnableSeen = now;
+            _enableWatchRunning = true;
+
+            // Einmal gesehen heisst: das Objekt ist verknuepft. Das wird persistiert, damit die
+            // Ueberwachung nach einem Neustart sofort wieder laeuft (E-1f, siehe restore()).
+            if (!_enableSeenEver)
+            {
+                _enableSeenEver = true;
+                _persistDirty = true;
+            }
+
             if (_enableLatched != enabled)
             {
                 _enableLatched = enabled;
@@ -357,8 +381,12 @@ Fan::Fault FanChannel::activeFault() const
 void FanChannel::updateEnable()
 {
     const uint16_t watch = ParamFAN_fEnableWatchTime;
-    if (watch == 0) return;          // Ueberwachung abgeschaltet
-    if (_lastEnableSeen == 0) return; // noch nie ein Freigabe-Telegramm gesehen
+    if (watch == 0) return; // Ueberwachung abgeschaltet
+
+    // Solange die Freigabe nie empfangen wurde, ist das Objekt offensichtlich nicht verknuepft
+    // und die Anlage laeuft ohne Freigabe-Konzept. Nach dem ersten Telegramm bleibt die
+    // Ueberwachung dauerhaft aktiv, auch ueber Neustarts hinweg (E-1f, siehe restore()).
+    if (!_enableWatchRunning) return;
 
     if (_enableLatched && (millis() - _lastEnableSeen) > (uint32_t)watch * 60000)
     {
@@ -372,11 +400,14 @@ void FanChannel::updateRole()
 {
     if (_isMaster) return;
 
+    // Ueberwachungszeit in Sekunden: sie muss unterhalb einer Zykluszeit bleiben, sonst
+    // foerdert ein reversierender Knoten ohne Takt so lange in eine Richtung, dass die
+    // Gebaeudebilanz kippt, bevor die Abschaltung greift. In Minuten war das nicht darstellbar.
     const uint16_t watch = ParamFAN_fMasterWatchTime;
     if (watch == 0 || _lastMasterSeen == 0) return;
 
     // Bis zum Ablauf gilt der letzte Zustand, danach abschalten und melden.
-    if (!_masterTimeout && (millis() - _lastMasterSeen) > (uint32_t)watch * 60000)
+    if (!_masterTimeout && (millis() - _lastMasterSeen) > (uint32_t)watch * 1000)
     {
         _masterTimeout = true;
         logInfoP("Lebenszeichen des Masters ausgeblieben");

@@ -4,8 +4,6 @@ OpenKNX function module for decentralised ventilation with reversing fans. Provi
 channels; it is embedded into an application such as
 [OAM-FanControl](https://github.com/cad435/OAM-FanControl).
 
-> **Status: development.** Nothing has been verified on hardware yet.
-
 ## What it does
 
 One channel is one fan node. Nodes form a group over shared group addresses with one master
