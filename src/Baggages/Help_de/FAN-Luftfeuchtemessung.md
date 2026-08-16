@@ -1,3 +1,0 @@
-### Luftfeuchtemessung
-Relativ: Allein der Messwert der relativen Luftfeuchtigkeit im Raum entscheidet, ob der Automatikbetrieb aktiviert wird
-Absolut: Wie im relativen Modus bestimmt die relative Luftfeuchtigkeit, ob der Automatikbetrieb aktiviert wird. Zusätzlich wird der absolute Wassergehalt in der Luft für Innen und Außen berechnet. Falls der Wassergehalt Außen höher ist, wird der Lüfter abgeschaltet (vgl. Taupunktlüfter).

@@ -1,44 +1,50 @@
 #pragma once
 
-#include "MaicoPPB30.h"
-#include "FawasAirSolitaire.h"
-#include "FanChannel.h"
 #include "OpenKNX.h"
-#include "hardware.h"
-#include "knxprod.h"
+#include "FanChannel.h"
 #include "RP2040FanHardware.h"
 #include "TachoReader.h"
+#include "hardware.h"
+#include "knxprod.h"
 
-class FanModule : public OpenKNX::Module {
-public:
-  void loop() override;
-  void setup(bool configured) override;
+/**
+ * @brief OpenKNX-Modul der Luftersteuerung. Haelt die Knoten des Geraetes.
+ *
+ * Core 0 fuehrt die Kanallogik, Core 1 misst die Drehzahl. Die persistenten Werte
+ * (Freigabe-Latch, Suspendierung, Betriebssekunden) liegen im Modul-Flashbereich.
+ */
+class FanModule : public OpenKNX::Module
+{
+  public:
+    void setup(bool configured) override;
+    void loop(bool configured) override;
+    void processInputKo(GroupObject &ko) override;
 
 #ifdef OPENKNX_DUALCORE
-  void setup1() override;
-  void loop1() override;
+    void setup1(bool configured) override;
+    void loop1(bool configured) override;
 #endif
 
-  void processAfterStartupDelay() override;
-  void processInputKo(GroupObject &ko) override;
-  bool sendReadRequest(GroupObject &ko);
+    void processAfterStartupDelay() override;
+    void processBeforeRestart() override;
 
-  const std::string name() override;
-  const std::string version() override;
+    uint16_t flashSize() override;
+    void writeFlash() override;
+    void readFlash(const uint8_t *data, const uint16_t size) override;
 
-private:
-  RP2040FanHardware _fan1Hw;
-  RP2040FanHardware _fan2Hw;
-  Fan* _fan1 = nullptr;
-  Fan* _fan2 = nullptr;
+    const std::string name() override { return "FanControl"; }
+    const std::string version() override { return MODULE_FanControl_Version; }
 
-  FanChannel *_channel[FAN_ChannelCount];
-  uint32_t readRequestDelay = 0;
+  private:
+    static constexpr uint8_t FlashVersion = 1;
 
-  TachoReader _tacho[FAN_ChannelCount];
-  uint32_t _lastRpmUpdate = 0;
-  volatile bool _setupComplete = false;
+    RP2040FanHardware _hw[FAN_ChannelCount];
+    FanChannel *_channel[FAN_ChannelCount] = {};
+    TachoReader _tacho[FAN_ChannelCount];
+
+    uint32_t _lastTachoUpdate = 0;
+    volatile bool _setupComplete = false;
+    bool _startupDelayDone = false;
 };
 
-// Wir benutzen das, um in main besser auf das Modul zugreifen zu können
 extern FanModule openknxFanModule;
