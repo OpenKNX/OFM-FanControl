@@ -3,7 +3,6 @@
 #include "OpenKNX.h"
 #include "FanChannel.h"
 #include "RP2040FanHardware.h"
-#include "TachoReader.h"
 #include "hardware.h"
 #include "knxprod.h"
 
@@ -42,9 +41,7 @@ class FanModule : public OpenKNX::Module
     // mehr Luefter anbieten, als das Board treiben kann, und diese Felder sind physisch.
     RP2040FanHardware _hw[FAN_BOARD_CHANNELS];
     FanChannel *_channel[FAN_BOARD_CHANNELS] = {};
-    TachoReader _tacho[FAN_BOARD_CHANNELS];
 
-    uint32_t _lastTachoUpdate = 0;
     volatile bool _setupComplete = false;
     bool _startupDelayDone = false;
 };

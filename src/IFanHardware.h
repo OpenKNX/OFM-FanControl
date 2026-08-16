@@ -33,7 +33,27 @@ class IFanHardware
      * nur einem Ausgang (Reg1 Fan-Addon-X2) klemmen beide Luefter auf dieselbe Klemme, was der
      * hochohmige PWM-Eingang der Luefter erlaubt.
      */
-    virtual void init(int8_t pinDrive, int8_t pinDriveMirror, int8_t pinSwitch) = 0;
+    virtual void init(int8_t pinDrive, int8_t pinDriveMirror, int8_t pinSwitch, int8_t pinTacho) = 0;
+
+    /** @brief true, wenn dieses Board fuer diesen Knoten einen Tacho-Eingang hat. */
+    virtual bool hasTacho() const = 0;
+
+    /**
+     * @brief Tacho-Eingang scharf schalten. Aus dem Kontext aufrufen, der messen soll.
+     *
+     * Getrennt von init(), weil der Interrupt auf dem Core landet, der ihn registriert -
+     * die Messung laeuft auf Core 1, die Ansteuerung auf Core 0.
+     */
+    virtual void beginTacho() = 0;
+
+    /** @brief Messung fortschreiben. Aus demselben Kontext wie beginTacho(). */
+    virtual void updateTacho() = 0;
+
+    /** @brief Letzte gemessene Drehzahl. Aus einem anderen Core lesbar. */
+    virtual uint16_t rpm() const = 0;
+
+    /** @brief Monotoner Pulszaehler fuer die Blockiererkennung. */
+    virtual uint32_t tachoPulses() const = 0;
 
     /**
      * @brief Mittelstellung setzen (Stellgroesse bei Stillstand).

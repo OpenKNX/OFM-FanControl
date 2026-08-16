@@ -85,7 +85,4 @@ namespace Fan
      */
     constexpr uint32_t RunHoursWriteMs = 30UL * 60UL * 1000UL; // Betriebsstunden
     constexpr uint32_t CycleRestWriteMs = 5000;                // Restzeit des Taktes
-
-    /** Aktualisierungsintervall der Drehzahlmessung auf Core 1. */
-    constexpr uint32_t TachoUpdateMs = 1000;
 }

@@ -49,7 +49,8 @@ void FanModule::setup(bool configured)
     // Die Hardware wird fuer alle vorhandenen Ausgaenge zugeordnet, damit sie auch bei einem
     // ungenutzten Kanal definiert in der Mittelstellung stehen.
     for (uint8_t i = 0; i < BoardChannels; i++)
-        _hw[i].init(boardPins[i].drive, boardPins[i].driveMirror, boardPins[i].sw);
+        _hw[i].init(boardPins[i].drive, boardPins[i].driveMirror, boardPins[i].sw,
+                    boardPins[i].tacho);
 
     if (!configured)
     {
@@ -90,12 +91,9 @@ void FanModule::setup1(bool configured)
 
     if (!configured) return;
 
+    // Der Tacho gehoert dem Kanal, nicht dem Modul: das Modul sagt nur, wann Core 1 dran ist.
     for (uint8_t i = 0; i < BoardChannels; i++)
-    {
-        if (_channel[i] == nullptr) continue;
-        if (boardPins[i].tacho < 0) continue;
-        _tacho[i].begin((uint8_t)boardPins[i].tacho);
-    }
+        if (_channel[i] != nullptr) _channel[i]->setup1();
 }
 
 void FanModule::loop1(bool configured)
@@ -103,7 +101,7 @@ void FanModule::loop1(bool configured)
     if (!configured) return;
 
     for (uint8_t i = 0; i < BoardChannels; i++)
-        if (_tacho[i].isEnabled()) _tacho[i].update();
+        if (_channel[i] != nullptr) _channel[i]->loop1();
 }
 #endif
 
@@ -123,17 +121,10 @@ void FanModule::loop(bool configured)
     if (!configured) return;
     if (!_startupDelayDone) return;
 
-    const uint32_t now = millis();
-    const bool takeRpm = (now - _lastTachoUpdate) >= Fan::TachoUpdateMs;
-    if (takeRpm) _lastTachoUpdate = now;
-
     for (uint8_t i = 0; i < BoardChannels; i++)
     {
         FanChannel *channel = _channel[i];
         if (channel == nullptr) continue;
-
-        if (takeRpm)
-            channel->setMeasuredRpm(_tacho[i].getRPM(), _tacho[i].getPulseCount());
 
         channel->loop();
 

@@ -516,7 +516,7 @@ void FanChannel::applyOutput()
     {
         if ((now - _blockWindowStart) >= Fan::BlockWindowMs)
         {
-            if (_lastPulseCount == _blockWindowPulses)
+            if (_hw.tachoPulses() == _blockWindowPulses)
             {
                 if (_emptyWindows < 0xFF) _emptyWindows++;
                 if (_emptyWindows >= Fan::BlockWindowsToFault && !_blocked)
@@ -530,13 +530,13 @@ void FanChannel::applyOutput()
                 _emptyWindows = 0;
             }
             _blockWindowStart = now;
-            _blockWindowPulses = _lastPulseCount;
+            _blockWindowPulses = _hw.tachoPulses();
         }
     }
     else
     {
         _blockWindowStart = now;
-        _blockWindowPulses = _lastPulseCount;
+        _blockWindowPulses = _hw.tachoPulses();
         _emptyWindows = 0;
     }
 
@@ -641,7 +641,7 @@ void FanChannel::publish()
 
     if (_hasTacho)
     {
-        const int32_t rpm = _rpm;
+        const int32_t rpm = _hw.rpm();
         if ((minGapMs == 0 || (now - _lastSentRpmAt) >= minGapMs) &&
             passesDeadband(rpm, _lastSentRpm, ParamFAN_fRpmBandPct, ParamFAN_fRpmBandAbs))
         {
@@ -652,7 +652,7 @@ void FanChannel::publish()
 
         if (ParamFAN_fCurveA_RpmM > 0)
         {
-            const int32_t flow = rpmToFlow(_rpm);
+            const int32_t flow = rpmToFlow(_hw.rpm());
             // Totband in m3/h, der Rohwert ist um 10000 skaliert.
             if ((minGapMs == 0 || (now - _lastSentFlowAt) >= minGapMs) &&
                 passesDeadband(flow / 10000, _lastSentFlow / 10000,
@@ -740,8 +740,14 @@ void FanChannel::loop()
     updateDiagnostics();
 }
 
-void FanChannel::setMeasuredRpm(uint16_t rpm, uint32_t pulseCount)
+void FanChannel::setup1()
 {
-    _rpm = rpm;
-    _lastPulseCount = pulseCount;
+    // Der Interrupt landet auf dem Core, der ihn registriert - deshalb hier und nicht in
+    // setup(). Ohne Rueckmeldung im ETS-Parameter bleibt der Eingang unangetastet.
+    if (_active && _hasTacho) _hw.beginTacho();
+}
+
+void FanChannel::loop1()
+{
+    if (_active && _hasTacho) _hw.updateTacho();
 }

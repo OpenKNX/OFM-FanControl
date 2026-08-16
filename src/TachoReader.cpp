@@ -1,46 +1,40 @@
 #include "TachoReader.h"
 
-TachoReader *TachoReader::_instances[2] = {nullptr, nullptr};
-uint8_t TachoReader::_instanceCount = 0;
-
-void TachoReader::begin(uint8_t pin, uint8_t pulsesPerRev) {
+void TachoReader::begin(uint8_t pin, uint8_t pulsesPerRev)
+{
     _pin = pin;
-    _pulsesPerRev = pulsesPerRev;
+    _pulsesPerRev = pulsesPerRev > 0 ? pulsesPerRev : 1;
 
     pinMode(_pin, INPUT_PULLUP);
 
-    _index = _instanceCount;
-    _instances[_instanceCount++] = this;
-
-    void (*isr)() = (_index == 0) ? _isr0 : _isr1;
-    attachInterrupt(digitalPinToInterrupt(_pin), isr, FALLING);
+    // Mit `this` als Parameter registriert. Damit braucht es weder eine statische
+    // Instanztabelle noch je Instanz eine eigene ISR-Funktion - und keine Obergrenze.
+    attachInterruptParam(digitalPinToInterrupt(_pin), onPulse, FALLING, this);
 
     _lastTime = millis();
+    _lastCount = _pulseCount;
 }
 
-void TachoReader::update() {
-    uint32_t now = millis();
-    uint32_t elapsed = now - _lastTime;
+void TachoReader::update()
+{
+    const uint32_t now = millis();
+    const uint32_t elapsed = now - _lastTime;
 
-    if (elapsed < 500)
-        return;
+    // Unter einer halben Sekunde ist das Ergebnis bei kleinen Drehzahlen zu grob.
+    if (elapsed < 500) return;
 
-    noInterrupts();
-    uint32_t count = _pulseCount;
-    _pulseCount = 0;
-    interrupts();
+    // Ein 32-Bit-Wort wird auf dem RP2040 in einem Zugriff geladen, der ISR kann hier also
+    // nicht dazwischenfunken. Der Zaehler laeuft weiter, gemessen wird die Differenz.
+    const uint32_t count = _pulseCount;
+    const uint32_t delta = count - _lastCount; // Ueberlauf ist unkritisch: Zweierkomplement
 
-    _rpm = (uint16_t)((uint32_t)count * 60000UL / (elapsed * _pulsesPerRev));
+    _rpm = (uint16_t)(delta * 60000UL / (elapsed * _pulsesPerRev));
+
+    _lastCount = count;
     _lastTime = now;
 }
 
-uint16_t TachoReader::getRPM() {
-    return _rpm;
+void TachoReader::onPulse(void *self)
+{
+    static_cast<TachoReader *>(self)->_pulseCount++;
 }
-
-void TachoReader::_onPulse() {
-    _pulseCount++;
-}
-
-void TachoReader::_isr0() { if (_instances[0]) _instances[0]->_onPulse(); }
-void TachoReader::_isr1() { if (_instances[1]) _instances[1]->_onPulse(); }
