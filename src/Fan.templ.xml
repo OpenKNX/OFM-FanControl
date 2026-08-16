@@ -280,10 +280,10 @@
               <ComObjectRef Id="%AID%_O-%TT%%CC%018_R-%TT%%CC%01801" RefId="%AID%_O-%TT%%CC%018" Text="{{0:Lüfter %C%}}: Betriebsstunden"       FunctionText="Lüfter %C%: Ausgang, Stunden"                               TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
               <ComObjectRef Id="%AID%_O-%TT%%CC%019_R-%TT%%CC%01901" RefId="%AID%_O-%TT%%CC%019" Text="{{0:Lüfter %C%}}: Master erreichbar"     FunctionText="Lüfter %C%: Ausgang, Zustand"                               TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
 
-              <ComObjectRef Id="%AID%_O-%TT%%CC%020_R-%TT%%CC%02001" RefId="%AID%_O-%TT%%CC%020" Text="{{0:Lüfter %C%}}: Temperatur innen"    FunctionText="Lüfter %C%: Eingang, °C"  TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
-              <ComObjectRef Id="%AID%_O-%TT%%CC%021_R-%TT%%CC%02101" RefId="%AID%_O-%TT%%CC%021" Text="{{0:Lüfter %C%}}: Feuchte innen"       FunctionText="Lüfter %C%: Eingang, %"   TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
-              <ComObjectRef Id="%AID%_O-%TT%%CC%022_R-%TT%%CC%02201" RefId="%AID%_O-%TT%%CC%022" Text="{{0:Lüfter %C%}}: Temperatur außen"    FunctionText="Lüfter %C%: Eingang, °C"  TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
-              <ComObjectRef Id="%AID%_O-%TT%%CC%023_R-%TT%%CC%02301" RefId="%AID%_O-%TT%%CC%023" Text="{{0:Lüfter %C%}}: Feuchte außen"       FunctionText="Lüfter %C%: Eingang, %"   TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+              <ComObjectRef Id="%AID%_O-%TT%%CC%020_R-%TT%%CC%02001" RefId="%AID%_O-%TT%%CC%020" Text="{{0:Lüfter %C%}}: Taupunktwächter, Temperatur innen"    FunctionText="Lüfter %C%: Eingang, °C"  TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+              <ComObjectRef Id="%AID%_O-%TT%%CC%021_R-%TT%%CC%02101" RefId="%AID%_O-%TT%%CC%021" Text="{{0:Lüfter %C%}}: Taupunktwächter, Relative Luftfeuchte innen"       FunctionText="Lüfter %C%: Eingang, %"   TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+              <ComObjectRef Id="%AID%_O-%TT%%CC%022_R-%TT%%CC%02201" RefId="%AID%_O-%TT%%CC%022" Text="{{0:Lüfter %C%}}: Taupunktwächter, Temperatur außen"    FunctionText="Lüfter %C%: Eingang, °C"  TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+              <ComObjectRef Id="%AID%_O-%TT%%CC%023_R-%TT%%CC%02301" RefId="%AID%_O-%TT%%CC%023" Text="{{0:Lüfter %C%}}: Taupunktwächter, Relative Luftfeuchte außen"       FunctionText="Lüfter %C%: Eingang, %"   TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
               <ComObjectRef Id="%AID%_O-%TT%%CC%027_R-%TT%%CC%02701" RefId="%AID%_O-%TT%%CC%027" Text="{{0:Lüfter %C%}}: Leistung Soll Gruppe"       FunctionText="Lüfter %C%: Ausgang, Prozent"                               TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
               <ComObjectRef Id="%AID%_O-%TT%%CC%030_R-%TT%%CC%03001" RefId="%AID%_O-%TT%%CC%030" Text="{{0:Lüfter %C%}}: Master lebt Gruppe"    FunctionText="Lüfter %C%: Ausgang, Zustand"                               TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
               <ComObjectRef Id="%AID%_O-%TT%%CC%031_R-%TT%%CC%03101" RefId="%AID%_O-%TT%%CC%031" Text="{{0:Lüfter %C%}}: Zyklus Restzeit"       FunctionText="Lüfter %C%: Ausgang, Sekunden"                              TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
@@ -444,16 +444,21 @@
                       <choose ParamRefId="%AID%_UP-%TT%%CC%001_R-%TT%%CC%00101">
                         <when test="1">
                           <ParameterSeparator Id="%AID%_PS-nnn" Text="Anlaufpuls und Richtungswechsel" UIHint="Headline" />
-                          <ParameterRefRef RefId="%AID%_UP-%TT%%CC%016_R-%TT%%CC%01601" IndentLevel="1" HelpContext="%DOC%" />
                         </when>
                         <when test="0">
                           <ParameterSeparator Id="%AID%_PS-nnn" Text="Anlaufpuls" UIHint="Headline" />
                         </when>
                       </choose>
+                      <!-- Stellgroesse und Dauer stehen beieinander und beide immer sichtbar:
+                           die Dauer wird bei Stellgroesse 0 einfach ignoriert. Sie hinter einer
+                           Bedingung zu verstecken hat nur den Eindruck erzeugt, sie fehle.
+                           Die Totzeit kommt danach - sie betrifft den Richtungswechsel, nicht
+                           den Puls. -->
                       <ParameterRefRef RefId="%AID%_UP-%TT%%CC%015_R-%TT%%CC%01501" IndentLevel="1" HelpContext="%DOC%" />
-                      <choose ParamRefId="%AID%_UP-%TT%%CC%015_R-%TT%%CC%01501">
-                        <when test=">0">
-                          <ParameterRefRef RefId="%AID%_UP-%TT%%CC%017_R-%TT%%CC%01701" IndentLevel="1" HelpContext="%DOC%" />
+                      <ParameterRefRef RefId="%AID%_UP-%TT%%CC%017_R-%TT%%CC%01701" IndentLevel="1" HelpContext="%DOC%" />
+                      <choose ParamRefId="%AID%_UP-%TT%%CC%001_R-%TT%%CC%00101">
+                        <when test="1">
+                          <ParameterRefRef RefId="%AID%_UP-%TT%%CC%016_R-%TT%%CC%01601" IndentLevel="1" HelpContext="%DOC%" />
                         </when>
                       </choose>
 

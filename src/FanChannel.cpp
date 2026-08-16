@@ -314,12 +314,20 @@ void FanChannel::updateDewGuard()
         return;
     }
 
-    // Gelueftet wird, solange die Innenluft die feuchtere ist - dann traegt das Lueften
-    // Feuchte aus. Der Abstand wird in Zehntel Kelvin angegeben.
-    const float gap = dewPoint(_dewValue[1], _dewValue[0]) - dewPoint(_dewValue[3], _dewValue[2]);
+    const float tdIn = dewPoint(_dewValue[1], _dewValue[0]);
+    const float tdOut = dewPoint(_dewValue[3], _dewValue[2]);
+
+    // Erstes Kriterium: gelueftet wird, solange die Innenluft die feuchtere ist - dann traegt
+    // das Lueften Feuchte aus. Abstaende durchweg in Zehntel Kelvin.
+    const float gap = tdIn - tdOut;
     const float on = (float)ParamFAN_fDewOn / 10.0f;
     const float off = (float)ParamFAN_fDewOff / 10.0f;
 
+    // Ein Schutz des Keramikelements ueber einen Temperaturabstand waere hier denkbar, ist aber
+    // bewusst nicht eingebaut: ein Keramik-Regenerator befeuchtet und trocknet im Gegenstrom
+    // zyklisch ab - das ist der Mechanismus der Feuchterueckgewinnung, kein Schaden. Wer
+    // konservativer lueften will, hebt die Einschaltschwelle. Der Fall, der wirklich schaden
+    // koennte, ist Frost am Element, und das waere ein Kriterium ueber die Aussentemperatur.
     if (off < on)
     {
         if (gap >= on) _dewBlocking = false;
