@@ -27,6 +27,58 @@ drehzahlgeregelt.
 fördern gegenläufig zu Knoten in Phase. Die Zuordnung ist fest, die tatsächliche Förderrichtung
 wechselt mit dem Taktzustand, den der Master vorgibt.
 
+## Betriebsfälle
+
+Die Applikation kennt keine Betriebsarten-Umschaltung. Was ein Knoten tut, ergibt sich allein
+aus seiner Rolle und aus den Werten, die er empfängt. Daraus folgen zwei übliche Aufbauten.
+
+### A — Gruppe mit Master im Gerät
+
+Der Regelfall für eine reversierende Anlage. Genau ein Knoten der Gruppe ist Master, alle
+übrigen sind Slave. Der Master bildet die Leistungsvorgabe, gibt den Taktzustand vor und sendet
+ein Lebenszeichen; die Slaves empfangen alles auf gemeinsamen Gruppenadressen und rechnen mit
+ihrem eigenen Anteilsfaktor. Stoßlüftung, Zyklus-Restzeit und die Masterüberwachung gibt es nur
+in diesem Aufbau.
+
+### B — Externer Master, alle Knoten als Slave
+
+Übernimmt eine Visualisierung, ein Server, eine Zeitschaltuhr oder ein Logikbaustein die
+Steuerung, wird **kein Master im Gerät** benötigt. Alle Kanäle bleiben auf „Ist Master = Nein"
+und werden einzeln angesteuert.
+
+Das ist kein Behelf, sondern folgt direkt aus dem Aufbau: für einen Knoten ist nicht
+unterscheidbar, ob seine Leistungsvorgabe von einem Master, von Hand oder aus einer Regelung
+stammt. Er setzt den empfangenen Wert um.
+
+So wird es eingestellt:
+
+| | |
+|---|---|
+| Rolle | alle Kanäle „Ist Master = Nein" |
+| Leistung (KO 1) | je Kanal eine **eigene** Gruppenadresse — damit ist jeder Lüfter einzeln fahrbar, 0 % schaltet ihn ab |
+| Master lebt (KO 4) | **nicht verknüpfen**, und „Überwachungszeit Master" auf 0 stellen |
+| Taktzustand (KO 3) | nur bei reversiblen Kanälen nötig, wenn die Steuerung die Richtung wechseln soll |
+| Richtungsart (KO 2) | alternativ „Nur Richtung A" bzw. „Nur Richtung B" senden, dann ist der Takt wirkungslos |
+
+Alle Rückmeldungen bleiben verfügbar: Leistung, Drehzahl, Volumenstrom, Richtung, Läuft,
+Störung, Fehlercode und Betriebsstunden. Ebenso Freigabe, Quittierung und Suspendieren.
+
+> **Master lebt nicht verknüpfen.** Die Masterüberwachung startet erst mit dem ersten
+> empfangenen Lebenszeichen. Bleibt das Objekt unverknüpft, greift sie nie. Wird es dagegen
+> einmal beschrieben und danach nicht mehr bedient, fährt der Kanal nach Ablauf der
+> Überwachungszeit auf Leistung 0 und meldet Master-Timeout.
+
+> **Freigabe entweder ganz weglassen oder zyklisch senden.** Auch diese Überwachung beginnt mit
+> dem ersten empfangenen Telegramm — danach bleibt sie dauerhaft scharf, auch über einen
+> Neustart hinweg.
+
+> **Nach Spannungswiederkehr steht der Lüfter.** Die Leistungsvorgabe wird nicht gespeichert.
+> In Aufbau A sendet der Master sie im nächsten Zyklus von selbst wieder; bei externer Steuerung
+> muss diese den Wert nach einem Neustart erneut senden, am besten ohnehin zyklisch.
+
+Die Stoßlüftung gibt es in diesem Aufbau nicht — die externe Steuerung erreicht dasselbe, indem
+sie für die gewünschte Dauer eine höhere Leistung schreibt.
+
 ## Allgemein
 
 <!-- DOC HelpContext="PWM-Frequenz" -->
