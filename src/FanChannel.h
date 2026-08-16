@@ -62,6 +62,10 @@ class FanChannel : public OpenKNX::Channel
     uint8_t groupPower();
     uint8_t controlOutput() const;
     uint8_t hysteresisOutput();
+
+    // --- Taupunktwaechter (nur Master) ---
+    static float dewPoint(float relHumidity, float temperature);
+    void updateDewGuard();
     uint8_t powerToDrive(uint8_t power) const;
     Fan::Direction desiredDirection() const;
     int32_t rpmToFlow(uint16_t rpm) const;
@@ -88,6 +92,13 @@ class FanChannel : public OpenKNX::Channel
     float _ctrlValue = 0.0f;    // Istwert fuer die interne Regelung
     bool _ctrlValueSeen = false;
     bool _hystActive = false;   // Zweipunkt: aktueller Schaltzustand
+
+    // Taupunktwaechter: 0 = Temperatur innen, 1 = Feuchte innen, 2 = aussen, 3 = aussen
+    float _dewValue[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    uint32_t _dewSeenAt[4] = {0, 0, 0, 0};
+    bool _dewSeen[4] = {false, false, false, false};
+    bool _dewBlocking = false;  // Veto aktiv, Aussenluft ist die feuchtere
+    bool _dewNoData = false;    // Messwerte fehlen oder sind veraltet
     uint8_t _powerAct = 0;      // tatsaechlich kommandierte Leistung
     uint8_t _driveAct = 0;      // ausgegebene Stellgroesse
     bool _tact = false;

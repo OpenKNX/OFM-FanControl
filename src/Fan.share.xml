@@ -116,6 +116,19 @@
                 <TypeNumber SizeInBit="16" Type="unsignedInt" minInclusive="1" maxInclusive="10000" />
               </ParameterType>
 
+              <!-- Taupunktabstand in Zehntel Kelvin: ganze Kelvin waeren zu grob, typische
+                   Werte liegen zwischen 0,5 und 2 K. -->
+              <ParameterType Id="%AID%_PT-FanDewFallback" Name="FanDewFallback">
+                <TypeRestriction Base="Value" SizeInBit="1">
+                  <Enumeration Text="Weiter lüften" Value="0" Id="%ENID%" />
+                  <Enumeration Text="Lüftung sperren" Value="1" Id="%ENID%" />
+                </TypeRestriction>
+              </ParameterType>
+
+              <ParameterType Id="%AID%_PT-FanDewGap" Name="FanDewGap">
+                <TypeNumber SizeInBit="8" Type="unsignedInt" minInclusive="0" maxInclusive="200" />
+              </ParameterType>
+
               <!-- Geraeteweit, nicht je Kanal: analogWriteFreq() wirkt auf dem RP2040 global. -->
               <ParameterType Id="%AID%_PT-FanPwmFreq" Name="FanPwmFreq">
                 <TypeNumber SizeInBit="16" Type="unsignedInt" minInclusive="500" maxInclusive="20000" />

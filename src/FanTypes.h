@@ -63,7 +63,16 @@ namespace Fan
         Config = 3,              // Kanaltyp passt nicht zur Hardware, Kennlinie unplausibel
         InvalidValue = 4,        // ungueltiger Empfangswert
         NoRotation = 5,          // angesteuert, aber keine Drehzahl (auch blockierter Rotor)
-        MonitoringSuspended = 6  // Ueberwachung ausgesetzt, weil suspendiert
+        MonitoringSuspended = 6, // Ueberwachung ausgesetzt, weil suspendiert
+        DewPointBlocked = 7,     // Taupunktwaechter sperrt: Aussenluft ist die feuchtere
+        DewPointNoData = 8       // Taupunktwaechter ohne brauchbare Messwerte
+    };
+
+    /** Verhalten des Taupunktwaechters, wenn Messwerte fehlen oder veraltet sind. */
+    enum class DewFallback : uint8_t
+    {
+        KeepVentilating = 0,
+        Block = 1
     };
 
     /** Zustaende der Kanal-Zustandsmaschine. */

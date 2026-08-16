@@ -129,7 +129,13 @@
                 <Parameter Id="%AID%_UP-%TT%%CC%061" Name="f%C%HystOff"   Offset="2" BitOffset="0" ParameterType="%AID%_PT-FanCtrlSetpoint" Text="Ausschaltschwelle" Value="50" />
                 <Parameter Id="%AID%_UP-%TT%%CC%062" Name="f%C%HystPower" Offset="4" BitOffset="0" ParameterType="%AID%_PT-FanPercent"      Text="Leistung eingeschaltet" SuffixText=" %" Value="100" />
                 <Parameter Id="%AID%_UP-%TT%%CC%063" Name="f%C%HystBase"  Offset="5" BitOffset="0" ParameterType="%AID%_PT-FanPercent"      Text="Leistung ausgeschaltet" SuffixText=" %" Value="0" />
-                <Parameter Id="%AID%_UP-%TT%%CC%099" Name="f%C%Reserve" Offset="6" BitOffset="0" ParameterType="%AID%_PT-FanPercent" Text="Reserve" Value="0" Access="None" />
+                <!-- Taupunktwaechter: Veto auf die fertige Leistung, nur beim Master. -->
+                <Parameter Id="%AID%_UP-%TT%%CC%070" Name="f%C%DewGuard" Offset="6" BitOffset="0" ParameterType="%AID%_PT-OnOffYesNo" Text="Taupunktwächter" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%071" Name="f%C%DewOn"    Offset="7" BitOffset="0" ParameterType="%AID%_PT-FanDewGap" Text="Lüften ab Taupunktabstand" SuffixText=" × 0,1 K" Value="10" />
+                <Parameter Id="%AID%_UP-%TT%%CC%072" Name="f%C%DewOff"   Offset="8" BitOffset="0" ParameterType="%AID%_PT-FanDewGap" Text="Sperren unter Taupunktabstand" SuffixText=" × 0,1 K" Value="5" />
+                <Parameter Id="%AID%_UP-%TT%%CC%073" Name="f%C%DewFallback" Offset="6" BitOffset="1" ParameterType="%AID%_PT-FanDewFallback" Text="Bei fehlenden Messwerten" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%074" Name="f%C%DewWatch"    Offset="9" BitOffset="0" ParameterType="%AID%_PT-FanWatchMin" Text="Überwachungszeit Messwerte" SuffixText=" min  (0 = keine Überwachung)" Value="15" />
+                <Parameter Id="%AID%_UP-%TT%%CC%099" Name="f%C%Reserve" Offset="10" BitOffset="0" ParameterType="%AID%_PT-FanPercent" Text="Reserve" Value="0" Access="None" />
               </Union>
 
             </Parameters>
@@ -146,6 +152,11 @@
               <ParameterRef Id="%AID%_UP-%TT%%CC%061_R-%TT%%CC%06101" RefId="%AID%_UP-%TT%%CC%061" />
               <ParameterRef Id="%AID%_UP-%TT%%CC%062_R-%TT%%CC%06201" RefId="%AID%_UP-%TT%%CC%062" />
               <ParameterRef Id="%AID%_UP-%TT%%CC%063_R-%TT%%CC%06301" RefId="%AID%_UP-%TT%%CC%063" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%070_R-%TT%%CC%07001" RefId="%AID%_UP-%TT%%CC%070" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%071_R-%TT%%CC%07101" RefId="%AID%_UP-%TT%%CC%071" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%072_R-%TT%%CC%07201" RefId="%AID%_UP-%TT%%CC%072" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%073_R-%TT%%CC%07301" RefId="%AID%_UP-%TT%%CC%073" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%074_R-%TT%%CC%07401" RefId="%AID%_UP-%TT%%CC%074" />
               <ParameterRef Id="%AID%_UP-%TT%%CC%099_R-%TT%%CC%09901" RefId="%AID%_UP-%TT%%CC%099" />
               <ParameterRef Id="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" RefId="%AID%_P-%TT%%CC%000" />
               <ParameterRef Id="%AID%_UP-%TT%%CC%001_R-%TT%%CC%00101" RefId="%AID%_UP-%TT%%CC%001" />
@@ -220,6 +231,11 @@
               <ComObject Id="%AID%_O-%TT%%CC%019" Name="%C%MasterOk"     Number="%K19%" ObjectSize="1 Bit"   Text="" FunctionText="" ReadFlag="Enabled"  WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled"  UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-11" />
 
               <!-- ===== Master-Ausgaenge zur Gruppenverteilung ===== -->
+              <!-- Taupunktwaechter, nur Master: vier Messwerte, alle DPT 9.x -->
+              <ComObject Id="%AID%_O-%TT%%CC%020" Name="%C%TempIn"    Number="%K20%" ObjectSize="2 Bytes" Text="" FunctionText="" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Enabled" ReadOnInitFlag="Disabled" DatapointType="DPST-9-1" />
+              <ComObject Id="%AID%_O-%TT%%CC%021" Name="%C%HumIn"     Number="%K21%" ObjectSize="2 Bytes" Text="" FunctionText="" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Enabled" ReadOnInitFlag="Disabled" DatapointType="DPST-9-7" />
+              <ComObject Id="%AID%_O-%TT%%CC%022" Name="%C%TempOut"   Number="%K22%" ObjectSize="2 Bytes" Text="" FunctionText="" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Enabled" ReadOnInitFlag="Disabled" DatapointType="DPST-9-1" />
+              <ComObject Id="%AID%_O-%TT%%CC%023" Name="%C%HumOut"    Number="%K23%" ObjectSize="2 Bytes" Text="" FunctionText="" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Enabled" ReadOnInitFlag="Disabled" DatapointType="DPST-9-7" />
               <ComObject Id="%AID%_O-%TT%%CC%027" Name="%C%PowerGroup"   Number="%K27%" ObjectSize="1 Byte"  Text="" FunctionText="" ReadFlag="Enabled"  WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled"  UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-5-1" />
               <ComObject Id="%AID%_O-%TT%%CC%030" Name="%C%AliveGroup"   Number="%K30%" ObjectSize="1 Bit"   Text="" FunctionText="" ReadFlag="Enabled"  WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled"  UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-11" />
               <ComObject Id="%AID%_O-%TT%%CC%031" Name="%C%CycleRest"    Number="%K31%" ObjectSize="2 Bytes" Text="" FunctionText="" ReadFlag="Enabled"  WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled"  UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-7-5" />
@@ -264,6 +280,10 @@
               <ComObjectRef Id="%AID%_O-%TT%%CC%018_R-%TT%%CC%01801" RefId="%AID%_O-%TT%%CC%018" Text="{{0:Lüfter %C%}}: Betriebsstunden"       FunctionText="Lüfter %C%: Ausgang, Stunden"                               TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
               <ComObjectRef Id="%AID%_O-%TT%%CC%019_R-%TT%%CC%01901" RefId="%AID%_O-%TT%%CC%019" Text="{{0:Lüfter %C%}}: Master erreichbar"     FunctionText="Lüfter %C%: Ausgang, Zustand"                               TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
 
+              <ComObjectRef Id="%AID%_O-%TT%%CC%020_R-%TT%%CC%02001" RefId="%AID%_O-%TT%%CC%020" Text="{{0:Lüfter %C%}}: Temperatur innen"    FunctionText="Lüfter %C%: Eingang, °C"  TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+              <ComObjectRef Id="%AID%_O-%TT%%CC%021_R-%TT%%CC%02101" RefId="%AID%_O-%TT%%CC%021" Text="{{0:Lüfter %C%}}: Feuchte innen"       FunctionText="Lüfter %C%: Eingang, %"   TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+              <ComObjectRef Id="%AID%_O-%TT%%CC%022_R-%TT%%CC%02201" RefId="%AID%_O-%TT%%CC%022" Text="{{0:Lüfter %C%}}: Temperatur außen"    FunctionText="Lüfter %C%: Eingang, °C"  TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+              <ComObjectRef Id="%AID%_O-%TT%%CC%023_R-%TT%%CC%02301" RefId="%AID%_O-%TT%%CC%023" Text="{{0:Lüfter %C%}}: Feuchte außen"       FunctionText="Lüfter %C%: Eingang, %"   TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
               <ComObjectRef Id="%AID%_O-%TT%%CC%027_R-%TT%%CC%02701" RefId="%AID%_O-%TT%%CC%027" Text="{{0:Lüfter %C%}}: Leistung Soll Gruppe"       FunctionText="Lüfter %C%: Ausgang, Prozent"                               TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
               <ComObjectRef Id="%AID%_O-%TT%%CC%030_R-%TT%%CC%03001" RefId="%AID%_O-%TT%%CC%030" Text="{{0:Lüfter %C%}}: Master lebt Gruppe"    FunctionText="Lüfter %C%: Ausgang, Zustand"                               TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
               <ComObjectRef Id="%AID%_O-%TT%%CC%031_R-%TT%%CC%03101" RefId="%AID%_O-%TT%%CC%031" Text="{{0:Lüfter %C%}}: Zyklus Restzeit"       FunctionText="Lüfter %C%: Ausgang, Sekunden"                              TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
@@ -351,6 +371,24 @@
                               <ParameterRefRef RefId="%AID%_UP-%TT%%CC%062_R-%TT%%CC%06201" IndentLevel="2" HelpContext="%DOC%" />
                               <ParameterRefRef RefId="%AID%_UP-%TT%%CC%063_R-%TT%%CC%06301" IndentLevel="2" HelpContext="%DOC%" />
                               <ParameterSeparator Id="%AID%_PS-nnn" Text="Liegt die Ausschaltschwelle nicht unter der Einschaltschwelle, entfällt die Hysterese und es wird an der Einschaltschwelle umgeschaltet." UIHint="Information" />
+                            </when>
+                          </choose>
+                        </when>
+                      </choose>
+
+                      <!-- Taupunktwaechter: Veto ueber allen Sollwertquellen, nur Master -->
+                      <choose ParamRefId="%AID%_UP-%TT%%CC%003_R-%TT%%CC%00301">
+                        <when test="1">
+                          <ParameterSeparator Id="%AID%_PS-nnn" Text="" UIHint="HorizontalRuler" />
+                          <ParameterSeparator Id="%AID%_PS-nnn" Text="Taupunktwächter" UIHint="Headline" />
+                          <ParameterRefRef RefId="%AID%_UP-%TT%%CC%070_R-%TT%%CC%07001" IndentLevel="1" HelpContext="%DOC%" />
+                          <choose ParamRefId="%AID%_UP-%TT%%CC%070_R-%TT%%CC%07001">
+                            <when test="1">
+                              <ParameterSeparator Id="%AID%_PS-nnn" Text="Vergleicht den Taupunkt innen und außen und sperrt die Lüftung, wenn die Außenluft die feuchtere ist. Verhindert, dass beim Lüften Feuchte eingetragen wird." UIHint="Information" />
+                              <ParameterRefRef RefId="%AID%_UP-%TT%%CC%071_R-%TT%%CC%07101" IndentLevel="2" HelpContext="%DOC%" />
+                              <ParameterRefRef RefId="%AID%_UP-%TT%%CC%072_R-%TT%%CC%07201" IndentLevel="2" HelpContext="%DOC%" />
+                              <ParameterRefRef RefId="%AID%_UP-%TT%%CC%074_R-%TT%%CC%07401" IndentLevel="2" HelpContext="%DOC%" />
+                              <ParameterRefRef RefId="%AID%_UP-%TT%%CC%073_R-%TT%%CC%07301" IndentLevel="2" HelpContext="%DOC%" />
                             </when>
                           </choose>
                         </when>
@@ -547,6 +585,14 @@
                       <choose ParamRefId="%AID%_UP-%TT%%CC%003_R-%TT%%CC%00301">
                         <when test="1">
                           <ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" />
+                          <choose ParamRefId="%AID%_UP-%TT%%CC%070_R-%TT%%CC%07001">
+                            <when test="1">
+                              <ComObjectRefRef RefId="%AID%_O-%TT%%CC%020_R-%TT%%CC%02001" />
+                              <ComObjectRefRef RefId="%AID%_O-%TT%%CC%021_R-%TT%%CC%02101" />
+                              <ComObjectRefRef RefId="%AID%_O-%TT%%CC%022_R-%TT%%CC%02201" />
+                              <ComObjectRefRef RefId="%AID%_O-%TT%%CC%023_R-%TT%%CC%02301" />
+                            </when>
+                          </choose>
                           <ComObjectRefRef RefId="%AID%_O-%TT%%CC%027_R-%TT%%CC%02701" />
                           <ComObjectRefRef RefId="%AID%_O-%TT%%CC%030_R-%TT%%CC%03001" />
                           <!-- Sollwertquelle bestimmt, welches Eingangsobjekt der Master braucht -->

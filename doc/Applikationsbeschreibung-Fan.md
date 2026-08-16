@@ -286,6 +286,70 @@ ihn statt dessen auf Grundlast weiterlaufen.
 
 Solange noch kein Istwert empfangen wurde, gilt dieser Wert.
 
+## Taupunktwächter
+
+Nur beim Master. Vergleicht den Taupunkt innen und außen und **sperrt die Lüftung, wenn die
+Außenluft die feuchtere ist** — sonst trägt das Lüften Feuchte ein, statt sie auszutragen. Der
+Klassiker dafür ist der Keller im Sommer: warme Außenluft fühlt sich trocken an, kühlt an den
+Wänden aber ab und gibt ihr Wasser dort wieder her.
+
+Der Wächter ist ein **Veto**, keine Sollwertquelle: er arbeitet über allen vier Quellen und
+klemmt die Gruppenvorgabe auf 0, wenn er sperrt. Er braucht vier Messwerte — Temperatur und
+relative Feuchte, je innen und außen — und berechnet daraus die beiden Taupunkte.
+
+Ein sperrender Wächter ist **kein Fehler**, sondern bestimmungsgemäßer Betrieb: er meldet
+Fehlercode 7, die Sammelmeldung *Störung* bleibt auf 0.
+
+<!-- DOC HelpContext="Taupunktwächter" -->
+### Taupunktwächter
+
+Schaltet die Taupunktüberwachung ein. Erst dann erscheinen die vier Messwert-Objekte.
+
+Ohne Wächter lüftet die Anlage nach ihrer Sollwertquelle, unabhängig davon, wie feucht die
+Außenluft ist.
+
+<!-- DOC HelpContext="Lüften ab Taupunktabstand" -->
+### Lüften ab Taupunktabstand
+
+Ab diesem Abstand zwischen Innen- und Außentaupunkt wird gelüftet, in Zehntel Kelvin.
+
+Die Vorgabe von 10 entspricht **1,0 K**. Je größer der Wert, desto deutlicher muss sich das
+Lüften lohnen, bevor es freigegeben wird.
+
+<!-- DOC HelpContext="Sperren unter Taupunktabstand" -->
+### Sperren unter Taupunktabstand
+
+Unterhalb dieses Abstands wird die Lüftung gesperrt, in Zehntel Kelvin.
+
+Zwischen den beiden Werten bleibt der erreichte Zustand stehen. Diese Hysterese ist nötig, weil
+sich die beiden Taupunkte im Tagesverlauf langsam aneinander annähern — ohne sie würde die
+Anlage am Umschaltpunkt dauernd ein- und ausschalten.
+
+<!-- DOC HelpContext="Überwachungszeit Messwerte" -->
+### Überwachungszeit Messwerte
+
+Höchstalter der vier Messwerte. Kommt einer davon länger nicht, gilt der Wächter als blind und
+es greift das eingestellte Verhalten bei fehlenden Messwerten.
+
+Ohne diese Zeit bliebe ein stillschweigend ausgefallener Außensensor unbemerkt — der Wächter
+rechnete dann unbegrenzt mit einem eingefrorenen Wert weiter. **0 schaltet die Überwachung ab.**
+
+Die Vorgabe von 15 min ist bewusst kurz gewählt: falsch gelüftete 15 Minuten richten kaum
+Schaden an, ein tagelang eingefrorener Messwert dagegen schon.
+
+<!-- DOC HelpContext="Bei fehlenden Messwerten" -->
+### Bei fehlenden Messwerten
+
+Was gelten soll, solange der Wächter keine brauchbaren Messwerte hat — weil noch keine
+eingetroffen sind oder weil sie zu alt geworden sind.
+
+* **Weiter lüften** — die Anlage arbeitet wie ohne Wächter. Vorrang für Luftqualität.
+* **Lüftung sperren** — die Anlage bleibt stehen, bis wieder Werte eintreffen. Vorrang für
+  Feuchteschutz.
+
+In beiden Fällen wird Fehlercode 8 gemeldet und *Störung* gesetzt: dass der Wächter blind ist,
+soll auffallen, egal wie entschieden wurde.
+
 ## Richtungsart
 
 <!-- DOC HelpContext="Richtungsart" -->
@@ -633,6 +697,8 @@ Ursache. Liegen mehrere Ursachen an, wird die mit der höchsten Priorität gesen
 | 4 | ungültiger Empfangswert |
 | 5 | keine Drehzahl trotz Ansteuerung |
 | 6 | Überwachung ausgesetzt (suspendiert) |
+| 7 | Taupunktwächter sperrt — Außenluft ist die feuchtere |
+| 8 | Taupunktwächter ohne brauchbare Messwerte |
 
 Fehlercode 5 fasst den blockierten Rotor und den defekten Drehzahlgeber zusammen: das Symptom ist
 in beiden Fällen „angesteuert, aber keine Drehzahl", und unterscheiden lassen sich die Ursachen
@@ -642,5 +708,10 @@ Störung gemeldet. Ein einzelnes leeres Fenster löst bewusst nicht aus.
 
 Fehlercode 3 erscheint auch, wenn der eingestellte Kanaltyp nicht zur Hardware passt, etwa
 „Reversibel" auf einem Board mit nur einem Ansteuerpfad je Kanal.
+
+Fehlercode 7 ist **kein Fehler**, sondern bestimmungsgemäßer Betrieb: der Taupunktwächter hält
+die Lüftung an, weil Lüften gerade Feuchte einträgt. Die Sammelmeldung `Störung` bleibt deshalb
+auf 0 — genau wie bei Code 6. Fehlercode 8 setzt sie dagegen: ein Wächter ohne Messwerte
+arbeitet blind, und das soll auffallen.
 
 Ein Telegramm auf `Quittierung` setzt einen gespeicherten Fehler zurück.

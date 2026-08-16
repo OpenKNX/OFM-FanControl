@@ -205,6 +205,21 @@ void FanChannel::processInputKo(GroupObject &ko)
             }
             break;
 
+        case FAN_KoTempIn:
+        case FAN_KoHumIn:
+        case FAN_KoTempOut:
+        case FAN_KoHumOut:
+            if (_isMaster && ParamFAN_fDewGuard)
+            {
+                // Alle vier sind DPT 9.x und teilen sich das 2-Byte-Gleitkommaformat.
+                const uint8_t slot = (index == FAN_KoTempIn) ? 0 : (index == FAN_KoHumIn) ? 1
+                                   : (index == FAN_KoTempOut) ? 2 : 3;
+                _dewValue[slot] = (float)ko.value(DPT_Value_Common_Temperature);
+                _dewSeenAt[slot] = now;
+                _dewSeen[slot] = true;
+            }
+            break;
+
         case FAN_KoAck:
             _blocked = false;
             _emptyWindows = 0;
@@ -253,6 +268,68 @@ uint8_t FanChannel::controlOutput() const
 
     if (out >= (float)maxOut) return maxOut;
     return (uint8_t)(out + 0.5f);
+}
+
+float FanChannel::dewPoint(float relHumidity, float temperature)
+{
+    // Magnus-Formel. Unter 1 % relativer Feuchte wird geklemmt: log(0) waere minus unendlich,
+    // und so tief misst ohnehin kein Sensor sinnvoll.
+    if (relHumidity < 1.0f) relHumidity = 1.0f;
+    if (relHumidity > 100.0f) relHumidity = 100.0f;
+
+    const float a = 17.625f;
+    const float b = 243.04f;
+    const float g = (a * temperature) / (b + temperature) + logf(relHumidity / 100.0f);
+    return (b * g) / (a - g);
+}
+
+void FanChannel::updateDewGuard()
+{
+    if (!_isMaster || !ParamFAN_fDewGuard)
+    {
+        _dewBlocking = false;
+        _dewNoData = false;
+        return;
+    }
+
+    // Fehlerfall: ein Wert wurde nie empfangen, oder er ist aelter als die Ueberwachungszeit.
+    // Ohne Zeitgrenze bliebe ein stillschweigend ausgefallener Aussensensor unbemerkt - der
+    // Waechter rechnete dann ewig mit einem eingefrorenen Wert weiter.
+    const uint16_t watch = ParamFAN_fDewWatch;
+    const uint32_t now = millis();
+    bool usable = true;
+
+    for (uint8_t i = 0; i < 4; i++)
+    {
+        if (!_dewSeen[i]) { usable = false; break; }
+        if (watch > 0 && (now - _dewSeenAt[i]) > (uint32_t)watch * 60000) { usable = false; break; }
+    }
+
+    _dewNoData = !usable;
+
+    if (!usable)
+    {
+        // Was dann gilt, entscheidet der Anwender: Feuchteschutz oder Luftqualitaet.
+        _dewBlocking = ((Fan::DewFallback)ParamFAN_fDewFallback == Fan::DewFallback::Block);
+        return;
+    }
+
+    // Gelueftet wird, solange die Innenluft die feuchtere ist - dann traegt das Lueften
+    // Feuchte aus. Der Abstand wird in Zehntel Kelvin angegeben.
+    const float gap = dewPoint(_dewValue[1], _dewValue[0]) - dewPoint(_dewValue[3], _dewValue[2]);
+    const float on = (float)ParamFAN_fDewOn / 10.0f;
+    const float off = (float)ParamFAN_fDewOff / 10.0f;
+
+    if (off < on)
+    {
+        if (gap >= on) _dewBlocking = false;
+        else if (gap <= off) _dewBlocking = true;
+        // dazwischen: Zustand halten, sonst flattert es am Umschaltpunkt
+    }
+    else
+    {
+        _dewBlocking = (gap < on);
+    }
 }
 
 uint8_t FanChannel::hysteresisOutput()
@@ -307,6 +384,9 @@ uint8_t FanChannel::targetPower()
     // Stosslueftung ist Masterfunktion: sie hebt die Gruppenvorgabe an.
     if (_isMaster && _boostUntil != 0 && (int32_t)(_boostUntil - millis()) > 0)
         group = ParamFAN_fBoostLevel;
+
+    // Taupunktwaechter ist ein Veto ueber allen Sollwertquellen, kein eigener Sollwertgeber.
+    if (_dewBlocking) return 0;
 
     const uint16_t scaled = (uint16_t)group * ParamFAN_fShare / 100;
     return scaled > 100 ? 100 : (uint8_t)scaled;
@@ -405,6 +485,8 @@ Fan::Fault FanChannel::activeFault() const
     if (_configFault) return Fan::Fault::Config;
     if (_invalidValue) return Fan::Fault::InvalidValue;
     if (_blocked) return Fan::Fault::NoRotation;
+    if (_dewNoData) return Fan::Fault::DewPointNoData;
+    if (_dewBlocking) return Fan::Fault::DewPointBlocked;
     if (_suspended) return Fan::Fault::MonitoringSuspended;
     return Fan::Fault::None;
 }
@@ -666,7 +748,12 @@ void FanChannel::publish()
     if (fault != _lastSentFault)
     {
         _lastSentFault = fault;
-        KoFAN_Fault.value(fault != 0 && fault != (uint8_t)Fan::Fault::MonitoringSuspended, DPT_Alarm);
+        // Ein sperrender Taupunktwaechter ist Normalbetrieb, kein Alarm. Fehlende Messwerte
+        // dagegen schon: dann arbeitet der Waechter blind.
+        const bool alarm = fault != 0 &&
+                           fault != (uint8_t)Fan::Fault::MonitoringSuspended &&
+                           fault != (uint8_t)Fan::Fault::DewPointBlocked;
+        KoFAN_Fault.value(alarm, DPT_Alarm);
         KoFAN_FaultCode.value(fault, DPT_Value_1_Ucount);
     }
 
@@ -765,6 +852,7 @@ void FanChannel::loop()
 
     updateEnable();
     updateRole();
+    updateDewGuard();
     applyOutput();
     runMaster();
     publish();

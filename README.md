@@ -11,6 +11,11 @@ that produces the power setpoint, the reversing tact and a keep-alive; the slave
 setpoint with their own limits. Both roles are the same code, selected by the "Ist Master"
 parameter.
 
+The master derives the group setpoint from a fixed value, an external object, an internal
+P controller or a two-point controller with hysteresis. An optional dew point guard can veto all
+of them: it compares the dew point inside and outside and stops ventilation while the outside air
+is the more humid one.
+
 Reversing fans carry speed **and** direction on a single output: 0 % is full speed in
 direction A, the midpoint is standstill, 100 % is full speed in direction B. Non-reversible
 fans are driven conventionally. Each node derives its direction from its phase assignment and
