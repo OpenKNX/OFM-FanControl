@@ -2,12 +2,8 @@
 
 FanModule openknxFanModule;
 
-// Boards ohne Tachoeingang definieren die Pins nicht.
-#ifndef FAN1_TACHO_PIN
-    #define FAN1_TACHO_PIN -1
-#endif
-#ifndef FAN2_TACHO_PIN
-    #define FAN2_TACHO_PIN -1
+#ifndef FAN_BOARD_PIN_TABLE
+    #error "Das Geraete-Header muss FAN_BOARD_CHANNELS und FAN_BOARD_PIN_TABLE definieren."
 #endif
 
 namespace
@@ -20,13 +16,16 @@ namespace
         int8_t tacho;
     };
 
-    // Reihenfolge entspricht den ETS-Kanaelen. Der Ansteuerpfad traegt Drehzahl und Richtung
+    // Die Pinbelegung ist eine Eigenschaft des Boards und kommt deshalb aus dem
+    // Geraete-Header, nicht aus diesem Modul. Der Ansteuerpfad traegt Drehzahl und Richtung
     // gemeinsam; der Spiegel-Ausgang fuehrt dasselbe Signal ein zweites Mal heraus, fuer den
     // zweiten Luefter eines Maico-Paares. Boards mit nur einem Ausgang geben -1 an.
-    const BoardPins boardPins[2] = {
-        {FAN1_S1_PWM_PIN, FAN1_S2_PWM_PIN, FAN1_SW_PIN, FAN1_TACHO_PIN},
-        {FAN2_S1_PWM_PIN, FAN2_S2_PWM_PIN, FAN2_SW_PIN, FAN2_TACHO_PIN},
-    };
+    const BoardPins boardPins[] = FAN_BOARD_PIN_TABLE;
+
+    constexpr uint8_t BoardChannels = (uint8_t)(sizeof(boardPins) / sizeof(boardPins[0]));
+
+    static_assert(BoardChannels == FAN_BOARD_CHANNELS,
+                  "FAN_BOARD_CHANNELS passt nicht zur Laenge von FAN_BOARD_PIN_TABLE.");
 }
 
 // ===========================================================================
@@ -47,16 +46,34 @@ void FanModule::setup(bool configured)
     logInfoP("PWM-Ausgang nicht invertiert");
 #endif
 
-    for (uint8_t i = 0; i < FAN_ChannelCount; i++)
+    // Die Hardware wird fuer alle vorhandenen Ausgaenge zugeordnet, damit sie auch bei einem
+    // ungenutzten Kanal definiert in der Mittelstellung stehen.
+    for (uint8_t i = 0; i < BoardChannels; i++)
+        _hw[i].init(boardPins[i].drive, boardPins[i].driveMirror, boardPins[i].sw,
+                    boardPins[i].tacho);
+
+    if (!configured)
     {
-        const BoardPins &pins = boardPins[i];
+        _setupComplete = true;
+        return;
+    }
 
-        // Die Hardware wird immer zugeordnet, damit die Ausgaenge auch bei einem
-        // deaktivierten Kanal definiert in der Mittelstellung stehen.
-        _hw[i].init(pins.drive, pins.driveMirror, pins.sw);
+    // Die ETS bietet FAN_ChannelCount Kanaele an - das ist eine Eigenschaft der Applikation.
+    // Wie viele davon Pins haben, weiss nur das Board. Aktivierte Kanaele jenseits davon
+    // werden gemeldet, statt stumm nichts zu tun. Der Kanalindex steckt hier nicht in einem
+    // FanChannel, deshalb wird die Adresse von Hand gerechnet statt ParamFAN_fActive benutzt.
+    for (uint8_t i = BoardChannels; i < FAN_ChannelCount; i++)
+    {
+        const uint16_t addr = FAN_ParamBlockOffset + i * FAN_ParamBlockSize + FAN_fActive;
+        if (knx.paramByte(addr) & FAN_fActiveMask)
+        {
+            logErrorP("Luefter %u ist aktiviert, das Board hat aber nur %u Ausgaenge",
+                      (unsigned)(i + 1), (unsigned)BoardChannels);
+        }
+    }
 
-        if (!configured) continue;
-
+    for (uint8_t i = 0; i < BoardChannels; i++)
+    {
         FanChannel *channel = new FanChannel(i, _hw[i]);
         channel->setup();
 
@@ -81,20 +98,17 @@ void FanModule::setup1(bool configured)
 
     if (!configured) return;
 
-    for (uint8_t i = 0; i < FAN_ChannelCount; i++)
-    {
-        if (_channel[i] == nullptr) continue;
-        if (boardPins[i].tacho < 0) continue;
-        _tacho[i].begin((uint8_t)boardPins[i].tacho);
-    }
+    // Der Tacho gehoert dem Kanal, nicht dem Modul: das Modul sagt nur, wann Core 1 dran ist.
+    for (uint8_t i = 0; i < BoardChannels; i++)
+        if (_channel[i] != nullptr) _channel[i]->setup1();
 }
 
 void FanModule::loop1(bool configured)
 {
     if (!configured) return;
 
-    for (uint8_t i = 0; i < FAN_ChannelCount; i++)
-        if (_tacho[i].isEnabled()) _tacho[i].update();
+    for (uint8_t i = 0; i < BoardChannels; i++)
+        if (_channel[i] != nullptr) _channel[i]->loop1();
 }
 #endif
 
@@ -114,17 +128,10 @@ void FanModule::loop(bool configured)
     if (!configured) return;
     if (!_startupDelayDone) return;
 
-    const uint32_t now = millis();
-    const bool takeRpm = (now - _lastTachoUpdate) >= Fan::TachoUpdateMs;
-    if (takeRpm) _lastTachoUpdate = now;
-
-    for (uint8_t i = 0; i < FAN_ChannelCount; i++)
+    for (uint8_t i = 0; i < BoardChannels; i++)
     {
         FanChannel *channel = _channel[i];
         if (channel == nullptr) continue;
-
-        if (takeRpm)
-            channel->setMeasuredRpm(_tacho[i].getRPM(), _tacho[i].getPulseCount());
 
         channel->loop();
 
@@ -138,7 +145,7 @@ void FanModule::loop(bool configured)
 void FanModule::processInputKo(GroupObject &ko)
 {
     const int8_t index = FAN_KoCalcChannel(ko.asap());
-    if (index < 0 || index >= FAN_ChannelCount) return;
+    if (index < 0 || index >= BoardChannels) return;
 
     FanChannel *channel = _channel[index];
     if (channel != nullptr) channel->processInputKo(ko);
@@ -156,14 +163,14 @@ void FanModule::processBeforeRestart()
 uint16_t FanModule::flashSize()
 {
     // Versionsbyte plus je Kanal ein Flagbyte und die Betriebssekunden.
-    return 1 + FAN_ChannelCount * 5;
+    return 1 + BoardChannels * 5;
 }
 
 void FanModule::writeFlash()
 {
     openknx.flash.writeByte(FlashVersion);
 
-    for (uint8_t i = 0; i < FAN_ChannelCount; i++)
+    for (uint8_t i = 0; i < BoardChannels; i++)
     {
         FanChannel::PersistentState state = {0x00, 0};
         if (_channel[i] != nullptr) state = _channel[i]->persistentState();
@@ -183,7 +190,7 @@ void FanModule::readFlash(const uint8_t *data, const uint16_t size)
         return;
     }
 
-    for (uint8_t i = 0; i < FAN_ChannelCount; i++)
+    for (uint8_t i = 0; i < BoardChannels; i++)
     {
         FanChannel::PersistentState state;
         state.flags = openknx.flash.readByte();

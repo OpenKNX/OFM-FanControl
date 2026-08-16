@@ -13,12 +13,13 @@
               <!-- Kanaltyp und Rolle -->
               <Union SizeInBit="16">
                 <Memory CodeSegment="%AID%_RS-04-00000" Offset="0" BitOffset="0" />
-                <Parameter Id="%AID%_UP-%TT%%CC%001" Name="f%C%ChannelType"   Offset="0" BitOffset="0" ParameterType="%AID%_PT-FanChannelType" Text="Kanaltyp" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%001" Name="f%C%Mode"          Offset="0" BitOffset="0" ParameterType="%AID%_PT-FanMode" Text="Modus" Value="0" />
                 <Parameter Id="%AID%_UP-%TT%%CC%002" Name="f%C%Suspended"     Offset="0" BitOffset="2" ParameterType="%AID%_PT-Suspended"      Text="Suspendiert" Value="0" />
                 <Parameter Id="%AID%_UP-%TT%%CC%003" Name="f%C%IsMaster"      Offset="0" BitOffset="3" ParameterType="%AID%_PT-OnOffYesNo"     Text="Ist Master" Value="0" />
                 <Parameter Id="%AID%_UP-%TT%%CC%004" Name="f%C%HasTacho"      Offset="0" BitOffset="4" ParameterType="%AID%_PT-OnOffYesNo"     Text="Drehzahlrückmeldung vorhanden" Value="0" />
                 <Parameter Id="%AID%_UP-%TT%%CC%005" Name="f%C%Phase"         Offset="0" BitOffset="5" ParameterType="%AID%_PT-FanPhase"       Text="Zuordnung" Value="0" />
                 <Parameter Id="%AID%_UP-%TT%%CC%006" Name="f%C%FlowInvert"    Offset="0" BitOffset="6" ParameterType="%AID%_PT-OnOffYesNo"     Text="Volumenstrom invertieren" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%010" Name="f%C%Active"        Offset="0" BitOffset="7" ParameterType="%AID%_PT-FanChannelActive" Text="Kanalaktivität" Value="0" />
                 <!-- 1 Bit Reserve auf BitOffset 7 -->
                 <Parameter Id="%AID%_UP-%TT%%CC%007" Name="f%C%Share"         Offset="1" BitOffset="0" ParameterType="%AID%_PT-FanPercent"     Text="Anteilsfaktor" SuffixText=" %" Value="100" />
               </Union>
@@ -138,6 +139,7 @@
               <ParameterRef Id="%AID%_UP-%TT%%CC%099_R-%TT%%CC%09901" RefId="%AID%_UP-%TT%%CC%099" />
               <ParameterRef Id="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" RefId="%AID%_P-%TT%%CC%000" />
               <ParameterRef Id="%AID%_UP-%TT%%CC%001_R-%TT%%CC%00101" RefId="%AID%_UP-%TT%%CC%001" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%010_R-%TT%%CC%01001" RefId="%AID%_UP-%TT%%CC%010" />
               <ParameterRef Id="%AID%_UP-%TT%%CC%002_R-%TT%%CC%00201" RefId="%AID%_UP-%TT%%CC%002" />
               <ParameterRef Id="%AID%_UP-%TT%%CC%003_R-%TT%%CC%00301" RefId="%AID%_UP-%TT%%CC%003" />
               <ParameterRef Id="%AID%_UP-%TT%%CC%004_R-%TT%%CC%00401" RefId="%AID%_UP-%TT%%CC%004" />
@@ -262,6 +264,9 @@
 
               <!-- ===================== Zeile in der Kanalauswahl-Tabelle ===================== -->
               <ParameterBlock Id="%AID%_PB-nnn" Name="Settings">
+                <!-- Die Zeile ist immer sichtbar: hier wird der Kanal ueberhaupt erst
+                     aktiviert. Der Modus steht nicht hier, sondern auf dem Kanalreiter, und
+                     das Aktiv/Inaktiv-Feld erscheint dort bewusst nicht noch einmal. -->
                 <ParameterBlock Id="%AID%_PB-nnn" Inline="true" Layout="Grid">
                   <Rows><Row Id="%AID%_PB-nnn_R-1" /></Rows>
                   <Columns>
@@ -270,24 +275,25 @@
                     <Column Id="%AID%_PB-nnn_C-3" Width="50%" />
                   </Columns>
                   <ParameterSeparator Id="%AID%_PS-nnn" Cell="1,1" Text="Lüfter %C%" />
-                  <ParameterRefRef RefId="%AID%_UP-%TT%%CC%001_R-%TT%%CC%00101" Cell="1,2" HelpContext="%DOC%" />
-                  <ParameterRefRef RefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001"  Cell="1,3" HelpContext="BASE-ChannelName" />
+                  <ParameterRefRef RefId="%AID%_UP-%TT%%CC%010_R-%TT%%CC%01001" Cell="1,2" HelpContext="%DOC%" />
+                  <!-- Beschreibung bleibt auch bei Deaktiviert sichtbar -->
+                  <ParameterRefRef RefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" Cell="1,3" HelpContext="BASE-ChannelName" />
                 </ParameterBlock>
               </ParameterBlock>
 
               <!-- ===================== Kanalreiter ===================== -->
               <ParameterBlock Id="%AID%_PB-nnn" Name="Channel">
-                <choose ParamRefId="%AID%_UP-%TT%%CC%001_R-%TT%%CC%00101">
-                  <when test=">0">
+                <choose ParamRefId="%AID%_UP-%TT%%CC%010_R-%TT%%CC%01001">
+                  <when test="=1">
                     <ParameterBlock Id="%AID%_PB-nnn" Name="f%C%Page" Text="Lüfter %C%: {{0: ...}}" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" Icon="fan" HelpContext="Empty" ShowInComObjectTree="true">
 
                       <!-- Kanaldefinition -->
                       <ParameterSeparator Id="%AID%_PS-nnn" Text="" UIHint="HorizontalRuler" />
                       <ParameterSeparator Id="%AID%_PS-nnn" Text="Kanaldefinition" UIHint="Headline" />
                       <ParameterRefRef RefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001"  IndentLevel="1" HelpContext="BASE-ChannelName" />
-                      <!-- Der Kanaltyp steht bewusst nur in der Kanalauswahl. Ihn hier zu
-                           wiederholen waere bei zwei Typen reine Doppelung; der Styleguide
-                           fuehrt den TypeSelect auf dem Kanalreiter ausdruecklich als optional. -->
+                      <!-- Der Modus gehoert an den Luefter, nicht in die Kanalauswahl: dort
+                           steht nur noch, wie viele Luefter es gibt und wie sie heissen. -->
+                      <ParameterRefRef RefId="%AID%_UP-%TT%%CC%001_R-%TT%%CC%00101" IndentLevel="1" HelpContext="%DOC%" />
                       <ParameterRefRef RefId="%AID%_UP-%TT%%CC%002_R-%TT%%CC%00201" IndentLevel="1" HelpContext="BASE-ChannelSuspended" />
 
                       <!-- Rolle und Zuordnung -->
@@ -296,7 +302,7 @@
                       <ParameterRefRef RefId="%AID%_UP-%TT%%CC%003_R-%TT%%CC%00301" IndentLevel="1" HelpContext="%DOC%" />
                       <ParameterRefRef RefId="%AID%_UP-%TT%%CC%004_R-%TT%%CC%00401" IndentLevel="1" HelpContext="%DOC%" />
                       <choose ParamRefId="%AID%_UP-%TT%%CC%001_R-%TT%%CC%00101">
-                        <when test="2">
+                        <when test="1">
                           <!-- Die Zuordnung gibt es nur beim Slave: der Master erzeugt den Takt
                                und ist damit die Bezugsphase. Die Firmware behandelt einen Master
                                unabhaengig vom gespeicherten Wert immer als "Phase". -->
@@ -334,12 +340,12 @@
                       <ParameterSeparator Id="%AID%_PS-nnn" Text="" UIHint="HorizontalRuler" />
                       <ParameterSeparator Id="%AID%_PS-nnn" Text="Stellgröße" UIHint="Headline" />
                       <choose ParamRefId="%AID%_UP-%TT%%CC%001_R-%TT%%CC%00101">
-                        <when test="1">
+                        <when test="0">
                           <!-- Nicht reversibel: gewoehnliche Ansteuerung, 0 = Stillstand. -->
                           <ParameterRefRef RefId="%AID%_UP-%TT%%CC%011_R-%TT%%CC%01101" IndentLevel="1" HelpContext="%DOC%" />
                           <ParameterRefRef RefId="%AID%_UP-%TT%%CC%012_R-%TT%%CC%01201" IndentLevel="1" HelpContext="%DOC%" />
                         </when>
-                        <when test="2">
+                        <when test="1">
                           <!-- Die Mittelstellung trennt die beiden Foerderrichtungen und gibt es
                                deshalb nur hier. -->
                           <ParameterRefRef RefId="%AID%_UP-%TT%%CC%029_R-%TT%%CC%02901" IndentLevel="1" HelpContext="%DOC%" />
@@ -354,7 +360,7 @@
 
                       <!-- Richtungsart und Takt: legt der Master fuer die ganze Gruppe fest -->
                       <choose ParamRefId="%AID%_UP-%TT%%CC%001_R-%TT%%CC%00101">
-                        <when test="2">
+                        <when test="1">
                           <choose ParamRefId="%AID%_UP-%TT%%CC%003_R-%TT%%CC%00301">
                             <when test="1">
                               <ParameterSeparator Id="%AID%_PS-nnn" Text="" UIHint="HorizontalRuler" />
@@ -378,11 +384,11 @@
                            ueberhaupt gewechselt werden kann. -->
                       <ParameterSeparator Id="%AID%_PS-nnn" Text="" UIHint="HorizontalRuler" />
                       <choose ParamRefId="%AID%_UP-%TT%%CC%001_R-%TT%%CC%00101">
-                        <when test="2">
+                        <when test="1">
                           <ParameterSeparator Id="%AID%_PS-nnn" Text="Anlaufpuls und Richtungswechsel" UIHint="Headline" />
                           <ParameterRefRef RefId="%AID%_UP-%TT%%CC%016_R-%TT%%CC%01601" IndentLevel="1" HelpContext="%DOC%" />
                         </when>
-                        <when test="1">
+                        <when test="0">
                           <ParameterSeparator Id="%AID%_PS-nnn" Text="Anlaufpuls" UIHint="Headline" />
                         </when>
                       </choose>
@@ -426,7 +432,7 @@
                           <ParameterSeparator Id="%AID%_PS-nnn" Text="Ohne hinterlegte Kennlinie (Endpunkt = 0) entfaellt die Volumenstrom-Ausgabe. Zwischen den Punkten wird linear interpoliert, oberhalb des Endpunkts wird begrenzt." UIHint="Information" />
                           <ParameterRefRef RefId="%AID%_UP-%TT%%CC%006_R-%TT%%CC%00601" IndentLevel="1" HelpContext="%DOC%" />
                           <choose ParamRefId="%AID%_UP-%TT%%CC%001_R-%TT%%CC%00101">
-                            <when test="1">
+                            <when test="0">
                               <ParameterRefRef RefId="%AID%_UP-%TT%%CC%030_R-%TT%%CC%03001" IndentLevel="1" HelpContext="%DOC%" />
                               <ParameterRefRef RefId="%AID%_UP-%TT%%CC%031_R-%TT%%CC%03101" IndentLevel="1" HelpContext="%DOC%" />
                               <ParameterRefRef RefId="%AID%_UP-%TT%%CC%032_R-%TT%%CC%03201" IndentLevel="1" HelpContext="%DOC%" />
@@ -434,7 +440,7 @@
                               <ParameterRefRef RefId="%AID%_UP-%TT%%CC%034_R-%TT%%CC%03401" IndentLevel="1" HelpContext="%DOC%" />
                               <ParameterRefRef RefId="%AID%_UP-%TT%%CC%035_R-%TT%%CC%03501" IndentLevel="1" HelpContext="%DOC%" />
                             </when>
-                            <when test="2">
+                            <when test="1">
                               <ParameterSeparator Id="%AID%_PS-nnn" Text="Kennlinie Richtung A" />
                               <ParameterRefRef RefId="%AID%_UP-%TT%%CC%030_R-%TT%%CC%03001" IndentLevel="2" HelpContext="%DOC%" />
                               <ParameterRefRef RefId="%AID%_UP-%TT%%CC%031_R-%TT%%CC%03101" IndentLevel="2" HelpContext="%DOC%" />
@@ -485,7 +491,7 @@
 
                       <!-- reversibel -->
                       <choose ParamRefId="%AID%_UP-%TT%%CC%001_R-%TT%%CC%00101">
-                        <when test="2">
+                        <when test="1">
                           <!-- Richtungsart und Taktzustand: dasselbe Objekt bei beiden Rollen,
                                eine Gruppenadresse. Der Master sendet den Takt darauf, die Slaves
                                empfangen ihn dort. Nur die Beschriftung wechselt mit der Rolle. -->
@@ -537,7 +543,7 @@
                             </when>
                           </choose>
                           <choose ParamRefId="%AID%_UP-%TT%%CC%001_R-%TT%%CC%00101">
-                            <when test="2">
+                            <when test="1">
                               <!-- Takt und Richtungsart liegen auf den gemeinsamen Objekten 3
                                    und 2, es gibt dafuer keine eigenen Verteilobjekte mehr. -->
                               <ComObjectRefRef RefId="%AID%_O-%TT%%CC%031_R-%TT%%CC%03101" />

@@ -2,8 +2,8 @@
 
 Modul zur Steuerung dezentraler Lüfter, einzeln oder im reversierenden Verbund.
 
-Ein Gerät bedient **zwei Knoten**; ein Knoten ist ein Lüfter mit seiner Ansteuerung und in der
-ETS ein Kanal. Mehrere Knoten lassen sich über gemeinsame Gruppenadressen zu einer **Gruppe**
+Ein Gerät bedient **bis zu acht Knoten** — so viele, wie seine Hardware Ausgänge hat; ein Knoten
+ist ein Lüfter mit seiner Ansteuerung und in der ETS ein Kanal. Mehrere Knoten lassen sich über gemeinsame Gruppenadressen zu einer **Gruppe**
 zusammenfassen, in der genau ein Knoten die Rolle des **Masters** übernimmt.
 
 > Die Hilfetexte dieser Datei werden vom OpenKNXproducer in die kontextsensitive Hilfe der ETS
@@ -27,6 +27,58 @@ drehzahlgeregelt.
 fördern gegenläufig zu Knoten in Phase. Die Zuordnung ist fest, die tatsächliche Förderrichtung
 wechselt mit dem Taktzustand, den der Master vorgibt.
 
+## Betriebsfälle
+
+Die Applikation kennt keine Betriebsarten-Umschaltung. Was ein Knoten tut, ergibt sich allein
+aus seiner Rolle und aus den Werten, die er empfängt. Daraus folgen zwei übliche Aufbauten.
+
+### A — Gruppe mit Master im Gerät
+
+Der Regelfall für eine reversierende Anlage. Genau ein Knoten der Gruppe ist Master, alle
+übrigen sind Slave. Der Master bildet die Leistungsvorgabe, gibt den Taktzustand vor und sendet
+ein Lebenszeichen; die Slaves empfangen alles auf gemeinsamen Gruppenadressen und rechnen mit
+ihrem eigenen Anteilsfaktor. Stoßlüftung, Zyklus-Restzeit und die Masterüberwachung gibt es nur
+in diesem Aufbau.
+
+### B — Externer Master, alle Knoten als Slave
+
+Übernimmt eine Visualisierung, ein Server, eine Zeitschaltuhr oder ein Logikbaustein die
+Steuerung, wird **kein Master im Gerät** benötigt. Alle Kanäle bleiben auf „Ist Master = Nein"
+und werden einzeln angesteuert.
+
+Das ist kein Behelf, sondern folgt direkt aus dem Aufbau: für einen Knoten ist nicht
+unterscheidbar, ob seine Leistungsvorgabe von einem Master, von Hand oder aus einer Regelung
+stammt. Er setzt den empfangenen Wert um.
+
+So wird es eingestellt:
+
+| | |
+|---|---|
+| Rolle | alle Kanäle „Ist Master = Nein" |
+| Leistung (KO 1) | je Kanal eine **eigene** Gruppenadresse — damit ist jeder Lüfter einzeln fahrbar, 0 % schaltet ihn ab |
+| Master lebt (KO 4) | **nicht verknüpfen**, und „Überwachungszeit Master" auf 0 stellen |
+| Taktzustand (KO 3) | nur bei reversiblen Kanälen nötig, wenn die Steuerung die Richtung wechseln soll |
+| Richtungsart (KO 2) | alternativ „Nur Richtung A" bzw. „Nur Richtung B" senden, dann ist der Takt wirkungslos |
+
+Alle Rückmeldungen bleiben verfügbar: Leistung, Drehzahl, Volumenstrom, Richtung, Läuft,
+Störung, Fehlercode und Betriebsstunden. Ebenso Freigabe, Quittierung und Suspendieren.
+
+> **Master lebt nicht verknüpfen.** Die Masterüberwachung startet erst mit dem ersten
+> empfangenen Lebenszeichen. Bleibt das Objekt unverknüpft, greift sie nie. Wird es dagegen
+> einmal beschrieben und danach nicht mehr bedient, fährt der Kanal nach Ablauf der
+> Überwachungszeit auf Leistung 0 und meldet Master-Timeout.
+
+> **Freigabe entweder ganz weglassen oder zyklisch senden.** Auch diese Überwachung beginnt mit
+> dem ersten empfangenen Telegramm — danach bleibt sie dauerhaft scharf, auch über einen
+> Neustart hinweg.
+
+> **Nach Spannungswiederkehr steht der Lüfter.** Die Leistungsvorgabe wird nicht gespeichert.
+> In Aufbau A sendet der Master sie im nächsten Zyklus von selbst wieder; bei externer Steuerung
+> muss diese den Wert nach einem Neustart erneut senden, am besten ohnehin zyklisch.
+
+Die Stoßlüftung gibt es in diesem Aufbau nicht — die externe Steuerung erreicht dasselbe, indem
+sie für die gewünschte Dauer eine höhere Leistung schreibt.
+
 ## Allgemein
 
 <!-- DOC HelpContext="PWM-Frequenz" -->
@@ -44,23 +96,43 @@ Signal nicht mehr sauber auswertet, eine zu niedrige kann hörbar werden.
 
 ## Kanaldefinition
 
-<!-- DOC HelpContext="Kanaltyp" -->
-### Kanaltyp
+<!-- DOC HelpContext="Kanalaktivität" -->
+### Kanalaktivität
 
-Legt fest, ob und wie dieser Kanal existiert.
+Schaltet diesen Lüfterkanal ein oder aus. Steht **ausschließlich in der Kanalauswahl** — auf dem
+Lüfter-Reiter erscheint das Feld bewusst nicht noch einmal.
 
-* **Deaktiviert** — der Kanal ist nicht bestückt. Es erscheint kein Kanalreiter und es werden
-  keine Kommunikationsobjekte angelegt.
-* **Nicht reversibel** — eine Förderrichtung. Es gibt keine Richtungs- und Taktobjekte.
-* **Reversibel** — zwei Förderrichtungen. Richtung und Takt sind verfügbar, die Stellgröße wird
-  je Richtung eingestellt.
+* **Deaktiviert** — der Kanal wird nicht benutzt. Es gibt keinen Lüfter-Reiter und keine
+  Kommunikationsobjekte; die Beschreibung bleibt trotzdem editierbar.
+* **Aktiviert** — der Kanal wird benutzt und erhält seinen eigenen Reiter.
 
-Der Kanaltyp wird **ausschließlich in der Kanalauswahl** eingestellt; auf dem Kanalreiter
-erscheint er bewusst nicht noch einmal.
+Die Kanäle sind unabhängig voneinander: es ist zulässig, nur Lüfter 2 zu aktivieren und Lüfter 1
+ungenutzt zu lassen.
 
-Ob die Hardware eine zweite Förderrichtung überhaupt unterstützt, hängt vom Board und von der
-eingestellten Mittelstellung ab; passt der Kanaltyp nicht dazu, meldet das Gerät einen
-Konfigurationsfehler.
+Das ist die dauerhafte Festlegung „ist der Kanal bestückt". Um einen **vorhandenen** Kanal
+vorübergehend ruhen zu lassen — für Service oder Fehlersuche — dient „Suspendiert" auf dem
+Lüfter-Reiter; dabei bleiben Objekte und Gruppenadressen erhalten.
+
+> **Mehr Kanäle als Ausgänge:** Die Applikation bietet 8 Kanäle an, die Zahl der tatsächlichen
+> Ausgänge bestimmt die Hardware. Werden mehr Kanäle aktiviert, als das Gerät treiben kann,
+> laufen die überzähligen nicht — das Gerät meldet beim Start einen Konfigurationsfehler.
+
+<!-- DOC HelpContext="Modus" -->
+### Modus
+
+Legt fest, wie dieser Lüfter gefahren wird.
+
+* **Nicht reversibel** — eine Förderrichtung. Es gibt keine Richtungs- und Taktobjekte, und die
+  Stellgröße wird gewöhnlich gefahren: 0 % ist Stillstand, 100 % volle Leistung.
+* **Reversibel** — zwei Förderrichtungen auf einem Ausgang. Richtung und Takt sind verfügbar,
+  Stellgröße Minimum und Maximum werden je Richtung eingestellt, und die Mittelstellung ist der
+  Stillstand.
+
+Der Modus gehört zum einzelnen Lüfter und steht deshalb hier, nicht in der Kanalauswahl. Ob der
+Kanal überhaupt benutzt wird, legt „Kanalaktivität" in der Kanalauswahl fest.
+
+Ob die Hardware eine zweite Förderrichtung unterstützt, hängt vom Board und von der eingestellten
+Mittelstellung ab; passt beides nicht zusammen, meldet das Gerät einen Konfigurationsfehler.
 
 ## Rolle und Zuordnung
 

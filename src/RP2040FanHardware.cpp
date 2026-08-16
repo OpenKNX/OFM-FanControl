@@ -12,17 +12,24 @@ void RP2040FanHardware::configurePwm(uint32_t freqHz)
     analogWriteRange(PwmRange);
 }
 
-void RP2040FanHardware::init(int8_t pinDrive, int8_t pinDriveMirror, int8_t pinSwitch)
+void RP2040FanHardware::init(int8_t pinDrive, int8_t pinDriveMirror, int8_t pinSwitch, int8_t pinTacho)
 {
     _pinDrive = pinDrive;
     _pinDriveMirror = pinDriveMirror;
     _pinSwitch = pinSwitch;
+    _pinTacho = pinTacho;
 
     if (_pinDrive >= 0) pinMode(_pinDrive, OUTPUT);
     if (_pinDriveMirror >= 0) pinMode(_pinDriveMirror, OUTPUT);
     if (_pinSwitch >= 0) pinMode(_pinSwitch, OUTPUT);
 
     stop();
+}
+
+void RP2040FanHardware::beginTacho()
+{
+    // Der Interrupt landet auf dem Core, der ihn registriert - deshalb nicht in init().
+    if (_pinTacho >= 0) _tacho.begin((uint8_t)_pinTacho);
 }
 
 void RP2040FanHardware::writeDuty(uint8_t dutyPercent)
