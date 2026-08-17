@@ -199,3 +199,131 @@ void FanModule::readFlash(const uint8_t *data, const uint16_t size)
         if (_channel[i] != nullptr) _channel[i]->restore(state);
     }
 }
+
+// ===========================================================================
+// Konsole
+// ===========================================================================
+
+void FanModule::showHelp()
+{
+    openknx.console.printHelpLine("fan", "Luefterkanaele anzeigen und zum Test ansteuern");
+}
+
+bool FanModule::processCommand(const std::string cmd, bool debugKo)
+{
+    (void)debugKo; // Diagnose-KO wird von diesem Modul nicht bedient
+
+    if (cmd.rfind("fan", 0) != 0) return false;
+
+    if (cmd == "fan")
+    {
+        openknx.console.printHelpLine("fan st", "Alle Kanaele je eine Zeile");
+        openknx.console.printHelpLine("fan cNN", "Kanal NN ausfuehrlich, z.B. fan c01");
+        openknx.console.printHelpLine("fan cNN pXX", "Test: Leistung XX Prozent, z.B. fan c01 p60");
+        openknx.console.printHelpLine("fan cNN a", "Test: Foerderrichtung A");
+        openknx.console.printHelpLine("fan cNN b", "Test: Foerderrichtung B");
+        openknx.console.printHelpLine("fan cNN auto", "Test beenden, nur Kanal NN");
+        openknx.console.printHelpLine("fan auto", "Test beenden, alle Kanaele");
+        openknx.console.printHelpLine("fan led", "Zuordnung der Status-LEDs pruefen");
+        logInfoP("Ein Test verfaellt von selbst nach %u min.", (unsigned)(Fan::ConsoleOverrideMs / 60000));
+        return true;
+    }
+
+    if (cmd == "fan st")
+    {
+        logInfoP("%u Kanal/Kanaele auf diesem Board:", (unsigned)BoardChannels);
+        logIndentUp();
+        for (uint8_t i = 0; i < BoardChannels; i++)
+        {
+            // Ein nicht aktivierter Kanal wird im Setup gar nicht angelegt. Das hier ausdruecklich
+            // zu melden ist wichtiger als es zu ueberspringen: sonst sieht eine fehlende
+            // Kanalaktivierung in der ETS wie ein defektes Modul aus.
+            if (_channel[i] == nullptr)
+                logInfoP("Ch%02u in der ETS nicht aktiviert", (unsigned)(i + 1));
+            else
+                _channel[i]->printStatusLine();
+        }
+        logIndentDown();
+        return true;
+    }
+
+    if (cmd == "fan led")
+    {
+        // Ob eine Status-LED leuchtet, entscheidet nicht dieses Modul, sondern die Zuordnung in
+        // OGM-Common. Ohne diese Ausgabe sieht eine fehlende Zuordnung wie ein toter LED-Code aus.
+        logInfoP("Standardbelegung (BASE): %s",
+                 openknx.ledFunctions.useDefaultFunction() ? "aktiv" : "abgewaehlt, es gelten die ETS-Dropdowns");
+        logIndentUp();
+        for (uint8_t i = 0; i < BoardChannels; i++)
+        {
+            const uint32_t id = Fan::LedFunctionBase + i;
+            OpenKNX::Led::FunctionGroup *group = openknx.ledFunctions.get(id);
+            logInfoP("Luefter %u -> Funktions-ID %u: %s", (unsigned)(i + 1), (unsigned)id,
+                     (group != nullptr && group->active()) ? "LED zugewiesen" : "KEINE LED zugewiesen");
+        }
+        logIndentDown();
+        return true;
+    }
+
+    if (cmd == "fan auto")
+    {
+        for (uint8_t i = 0; i < BoardChannels; i++)
+            if (_channel[i] != nullptr) _channel[i]->releaseOverride();
+        logInfoP("Alle Testuebersteuerungen beendet, zurueck auf Regelbetrieb");
+        return true;
+    }
+
+    // Ab hier nur noch kanalbezogene Befehle: "fan cNN [rest]"
+    if (cmd.length() < 6 || cmd[4] != 'c') return false;
+
+    const int channelNumber = atoi(cmd.substr(5, 2).c_str());
+    if (channelNumber < 1 || channelNumber > BoardChannels)
+    {
+        logInfoP("Kanal %d gibt es auf diesem Board nicht, es hat %u Ausgang/Ausgaenge",
+                 channelNumber, (unsigned)BoardChannels);
+        return true;
+    }
+
+    // Nicht aktivierte Kanaele legt das Setup nicht an. Ein Testbefehl darauf liefe ins Leere,
+    // deshalb hier der Hinweis statt stiller Wirkungslosigkeit.
+    FanChannel *channel = _channel[channelNumber - 1];
+    if (channel == nullptr)
+    {
+        logInfoP("Kanal %d ist in der ETS nicht aktiviert - dort aktivieren, dann neu programmieren",
+                 channelNumber);
+        return true;
+    }
+
+    const size_t space = cmd.find(' ', 4);
+    const std::string rest = (space == std::string::npos) ? "" : cmd.substr(space + 1);
+
+    if (rest.empty())
+    {
+        channel->printDetail();
+        return true;
+    }
+
+    if (rest == "auto")
+    {
+        channel->releaseOverride();
+        logInfoP("Kanal %d zurueck auf Regelbetrieb", channelNumber);
+    }
+    else if (rest == "a")
+        channel->setOverride(-1, 0);
+    else if (rest == "b")
+        channel->setOverride(-1, 1);
+    else if (rest[0] == 'p')
+    {
+        const int power = atoi(rest.substr(1).c_str());
+        if (power < 0 || power > 100)
+            logInfoP("Leistung muss zwischen 0 und 100 Prozent liegen");
+        else
+            channel->setOverride((int16_t)power, -1);
+    }
+    else
+    {
+        logInfoP("Unbekannter Zusatz \"%s\", siehe \"fan\"", rest.c_str());
+    }
+
+    return true;
+}

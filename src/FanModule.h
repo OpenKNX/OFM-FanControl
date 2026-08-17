@@ -31,6 +31,9 @@ class FanModule : public OpenKNX::Module
     void writeFlash() override;
     void readFlash(const uint8_t *data, const uint16_t size) override;
 
+    void showHelp() override;
+    bool processCommand(const std::string cmd, bool debugKo) override;
+
     const std::string name() override { return "FanControl"; }
     const std::string version() override { return MODULE_FanControl_Version; }
 

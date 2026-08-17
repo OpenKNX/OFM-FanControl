@@ -68,6 +68,26 @@ namespace Fan
         DewPointNoData = 8       // Taupunktwaechter ohne brauchbare Messwerte
     };
 
+    /**
+     * Basis der LED-Funktions-IDs. Kanal n meldet sich als LedFunctionBase + n an; in der ETS
+     * waehlt der Benutzer pro Info-LED aus, welche Funktion sie anzeigt.
+     *
+     * Die IDs sind geraeteweit eindeutig zu halten: OGM-Common belegt 1..4, das Netzwerkmodul 10,
+     * das Logikmodul 90..99. 110..117 ist frei und laesst Platz fuer alle acht Kanaele.
+     * Muss zu den Enumerationswerten von PT-SLEDFunc in Fan.share.xml passen.
+     */
+    constexpr uint32_t LedFunctionBase = 110;
+
+    /** Helligkeit der Status-LEDs: 25 % von 255. Voll aufgedreht blenden die RGBs im Verteiler. */
+    constexpr uint8_t LedLevel = 64;
+
+    /**
+     * Verfallszeit einer Konsolen-Uebersteuerung. Ein Testbefehl ist zum Messen und Hinsehen da,
+     * nicht zum Betreiben - ein vergessener Befehl darf die Anlage nicht dauerhaft von ihrer
+     * Regelung abschneiden. Nach Ablauf uebernimmt wieder die normale Sollwertbildung.
+     */
+    constexpr uint32_t ConsoleOverrideMs = 10UL * 60UL * 1000UL;
+
     /** Verhalten des Taupunktwaechters, wenn Messwerte fehlen oder veraltet sind. */
     enum class DewFallback : uint8_t
     {

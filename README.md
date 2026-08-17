@@ -21,6 +21,14 @@ direction A, the midpoint is standstill, 100 % is full speed in direction B. Non
 fans are driven conventionally. Each node derives its direction from its phase assignment and
 the master's tact — direction is never commanded directly.
 
+On devices with RGB status LEDs, each channel offers itself as an LED function ("Lüfter 1"…"8")
+that the user assigns to an info LED in the BASE module: green for direction A, blue for
+direction B, red on fault, dark at standstill, at 25 % brightness.
+
+The USB console exposes the channels for commissioning — `fan st` for a one-line-per-channel
+overview and `fan c01 p60` / `fan c01 b` to drive a fan without ETS or a group address. Such a
+test overrides the setpoint but not the safety vetoes, and expires by itself after 10 minutes.
+
 See [`doc/Applikationsbeschreibung-Fan.md`](doc/Applikationsbeschreibung-Fan.md) for the user
 documentation; it is also the source of the generated ETS context help under
 `src/Baggages/Help_de/`.

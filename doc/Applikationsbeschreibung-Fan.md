@@ -673,7 +673,7 @@ Wirkt als harte Sperre gegen Dauerverkehr, zusätzlich zu den Totbändern. **0 h
 
 Zwei verschiedene Dinge, die nicht verwechselt werden sollten:
 
-* **Kanaltyp „Deaktiviert"** — der Kanal ist nicht bestückt. Er hat keinen Reiter und keine
+* **Kanalaktivität „Deaktiviert"** — der Kanal ist nicht bestückt. Er hat keinen Reiter und keine
   Kommunikationsobjekte, kann also auch nichts melden.
 * **Suspendiert** — der Kanal bleibt vollständig bestehen, mit allen Kommunikationsobjekten und
   Gruppenadress-Verknüpfungen; nur seine Funktion ruht. Gedacht für Service und Fehlersuche.
@@ -700,14 +700,75 @@ Ursache. Liegen mehrere Ursachen an, wird die mit der höchsten Priorität gesen
 | 7 | Taupunktwächter sperrt — Außenluft ist die feuchtere |
 | 8 | Taupunktwächter ohne brauchbare Messwerte |
 
+Nicht jeder Fehlercode setzt auch `Störung`. Die Codes **6** und **7** sind bestimmungsgemäßer
+Betrieb: eine ausgesetzte Überwachung ist gewollt, und ein sperrender Taupunktwächter tut genau
+das, wofür er eingeschaltet wurde. Beide melden deshalb ihre Ursache im `Fehlercode`, lassen
+`Störung` aber auf 0 — sonst stünde die Anlage bei jeder feuchten Außenluft in der Alarmliste.
+Code **8** setzt `Störung` dagegen sehr wohl: fehlen die Messwerte, arbeitet der Wächter blind.
+
 Fehlercode 5 fasst den blockierten Rotor und den defekten Drehzahlgeber zusammen: das Symptom ist
 in beiden Fällen „angesteuert, aber keine Drehzahl", und unterscheiden lassen sich die Ursachen
 ohne zusätzliche Sensorik nicht. Erkannt wird der Zustand zyklisch — soll der Lüfter laufen und
 werden in zwei aufeinanderfolgenden Fünf-Sekunden-Fenstern keine Tacho-Pulse gezählt, wird die
 Störung gemeldet. Ein einzelnes leeres Fenster löst bewusst nicht aus.
 
-Fehlercode 3 erscheint auch, wenn der eingestellte Kanaltyp nicht zur Hardware passt, etwa
+Fehlercode 3 erscheint auch, wenn der eingestellte Modus nicht zur Hardware passt, etwa
 „Reversibel" auf einem Board mit nur einem Ansteuerpfad je Kanal.
+
+## Status-LEDs
+
+Geräte mit RGB-Status-LEDs können den Zustand eines Lüfters örtlich anzeigen — praktisch bei der
+Inbetriebnahme und bei der Fehlersuche, wenn keine Visualisierung zur Hand ist.
+
+Die Zuordnung geschieht **nicht** hier, sondern im Modul „Allgemein" (BASE): dort wählt man je
+Info-LED aus, welche Funktion sie darstellt. Die Lüftersteuerung meldet dafür einen Eintrag pro
+Kanal an, „Lüfter 1" bis „Lüfter 8". Zu beachten ist die Checkbox der Standardbelegung: solange
+sie gesetzt ist, gilt die im Gerät fest hinterlegte Werksbelegung und die Auswahlfelder bleiben
+ohne Wirkung.
+
+| Anzeige | Bedeutung |
+|---|---|
+| aus | Lüfter steht |
+| grün | läuft in Förderrichtung A |
+| blau | läuft in Förderrichtung B |
+| rot | Störung |
+
+Die LED leuchtet bereits während des Anlaufpulses in der Richtungsfarbe und ist während der
+Totzeit vor einem Richtungswechsel dunkel — der Lüfter steht dann tatsächlich. Nicht reversierbare
+Lüfter kennen nur Richtung A und leuchten deshalb ausschließlich grün.
+
+Rot erscheint bei genau denselben Ursachen, die auch das Objekt `Störung` setzen. Ein sperrender
+Taupunktwächter (Fehlercode 7) und eine ausgesetzte Überwachung (Fehlercode 6) sind
+bestimmungsgemäßer Betrieb und keine Störung; die LED ist dann dunkel wie bei jedem anderen
+Stillstand, und die Ursache steht im `Fehlercode`.
+
+Die Helligkeit ist auf 25 % festgelegt. Statusanzeigen sitzen in Verteilern oft auf Augenhöhe, und
+volle Helligkeit blendet dort mehr, als sie informiert.
+
+## Konsolenbefehle
+
+Über die USB-Konsole des Gerätes lassen sich die Kanäle einsehen und zum Test ansteuern — ohne
+ETS, ohne Gruppenadresse und ohne Visualisierung. Nützlich bei der Erstinbetriebnahme, wenn die
+Verdrahtung geprüft werden soll, bevor die Anlage projektiert ist.
+
+| Befehl | Wirkung |
+|---|---|
+| `fan` | Übersicht der Unterbefehle |
+| `fan st` | alle Kanäle je eine Zeile: Sollwert, Leistung, Stellgröße, Richtung, Zustand, Drehzahl, Fehlercode |
+| `fan cNN` | ein Kanal ausführlich, zusätzlich Rolle, Alarm-Bit, Betriebsstunden, Freigabe, Takt und Taupunktwächter |
+| `fan cNN pXX` | Testbetrieb mit Leistung XX Prozent |
+| `fan cNN a` bzw. `fan cNN b` | Testbetrieb mit erzwungener Förderrichtung |
+| `fan cNN auto` | Testbetrieb dieses Kanals beenden |
+| `fan auto` | Testbetrieb aller Kanäle beenden |
+| `fan led` | prüft, ob den Kanälen eine Status-LED zugeordnet ist |
+
+Der Testbetrieb ersetzt die Sollwertbildung, nicht die Schutzfunktionen: Freigabe,
+Master-Überwachung und Taupunktwächter behalten ihr Veto. Läuft der Lüfter trotz Vorgabe nicht,
+nennt `fan st` den Grund im Fehlercode. Ein Richtungswechsel im Testbetrieb durchläuft die
+normale Ablaufsteuerung mit Totzeit und Anlaufpuls, zeigt also das reale Verhalten.
+
+**Der Testbetrieb verfällt nach 10 Minuten von selbst.** Ein vergessener Testbefehl darf eine
+Anlage nicht dauerhaft von ihrer Regelung abschneiden.
 
 Fehlercode 7 ist **kein Fehler**, sondern bestimmungsgemäßer Betrieb: der Taupunktwächter hält
 die Lüftung an, weil Lüften gerade Feuchte einträgt. Die Sammelmeldung `Störung` bleibt deshalb

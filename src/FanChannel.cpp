@@ -385,6 +385,13 @@ uint8_t FanChannel::groupPower()
 
 uint8_t FanChannel::targetPower()
 {
+    // Die Konsolen-Uebersteuerung ersetzt die Sollwertbildung, damit man am Geraet ohne ETS und
+    // ohne Gruppentelegramm messen kann. Das Taupunkt-Veto bleibt bewusst wirksam: ein Testbefehl
+    // soll die Hardware pruefen, nicht eine Schutzfunktion aushebeln. Warum nichts laeuft, sagt
+    // dann "fan st" ueber den Fehlercode.
+    if (_testPower >= 0)
+        return _dewBlocking ? 0 : (uint8_t)_testPower;
+
     if (_masterTimeout) return 0;
 
     uint8_t group = groupPower();
@@ -418,6 +425,10 @@ uint8_t FanChannel::powerToDrive(uint8_t power) const
 Fan::Direction FanChannel::desiredDirection() const
 {
     if (_type != Fan::ChannelType::Reversible) return Fan::Direction::A;
+
+    // Der Richtungswechsel laeuft auch hier durch die Zustandsmaschine, also mit Totzeit und
+    // Anlaufpuls - eine uebersteuerte Richtung ist keine Abkuerzung am Ablauf vorbei.
+    if (_testDirection >= 0) return (Fan::Direction)_testDirection;
 
     switch (_dirMode)
     {
@@ -497,6 +508,45 @@ Fan::Fault FanChannel::activeFault() const
     if (_dewBlocking) return Fan::Fault::DewPointBlocked;
     if (_suspended) return Fan::Fault::MonitoringSuspended;
     return Fan::Fault::None;
+}
+
+bool FanChannel::isAlarm(Fan::Fault fault)
+{
+    // Ein sperrender Taupunktwaechter ist Normalbetrieb, kein Alarm. Fehlende Messwerte dagegen
+    // schon: dann arbeitet der Waechter blind.
+    return fault != Fan::Fault::None &&
+           fault != Fan::Fault::MonitoringSuspended &&
+           fault != Fan::Fault::DewPointBlocked;
+}
+
+void FanChannel::updateStatusLed()
+{
+    // Der Benutzer entscheidet in der ETS, ob eine Info-LED diesen Kanal zeigt. Ist keine
+    // zugewiesen, gibt es hier nichts zu tun - und wir fassen fremde LEDs nicht an.
+    OpenKNX::Led::FunctionGroup *led = openknx.ledFunctions.get(Fan::LedFunctionBase + channelIndex());
+    if (led == nullptr || !led->active()) return;
+
+    if (isAlarm(activeFault()))
+    {
+        led->color(Fan::LedLevel, 0, 0);
+        led->on(OpenKNX::Led::Capability::COLOR);
+        return;
+    }
+
+    // Stillstand ist der haeufigste Zustand einer Lueftung. Dunkel statt Dauerlicht, damit eine
+    // brennende LED tatsaechlich "der Luefter laeuft" bedeutet.
+    if (_driveAct == 0)
+    {
+        led->off();
+        return;
+    }
+
+    // Foerderrichtung A gruen, Richtung B blau. Nicht reversierbare Luefter kennen nur A.
+    if (_direction == Fan::Direction::B)
+        led->color(0, 0, Fan::LedLevel);
+    else
+        led->color(0, Fan::LedLevel, 0);
+    led->on(OpenKNX::Led::Capability::COLOR);
 }
 
 // ===========================================================================
@@ -756,12 +806,7 @@ void FanChannel::publish()
     if (fault != _lastSentFault)
     {
         _lastSentFault = fault;
-        // Ein sperrender Taupunktwaechter ist Normalbetrieb, kein Alarm. Fehlende Messwerte
-        // dagegen schon: dann arbeitet der Waechter blind.
-        const bool alarm = fault != 0 &&
-                           fault != (uint8_t)Fan::Fault::MonitoringSuspended &&
-                           fault != (uint8_t)Fan::Fault::DewPointBlocked;
-        KoFAN_Fault.value(alarm, DPT_Alarm);
+        KoFAN_Fault.value(isAlarm((Fan::Fault)fault), DPT_Alarm);
         KoFAN_FaultCode.value(fault, DPT_Value_1_Ucount);
     }
 
@@ -858,6 +903,12 @@ void FanChannel::loop()
 {
     if (!isActive()) return;
 
+    if (overrideActive() && (int32_t)(millis() - _testUntil) >= 0)
+    {
+        logInfoP("Testuebersteuerung abgelaufen, zurueck auf Regelbetrieb");
+        releaseOverride();
+    }
+
     updateEnable();
     updateRole();
     updateDewGuard();
@@ -865,6 +916,7 @@ void FanChannel::loop()
     runMaster();
     publish();
     updateDiagnostics();
+    updateStatusLed();
 }
 
 void FanChannel::setup1()
@@ -877,4 +929,134 @@ void FanChannel::setup1()
 void FanChannel::loop1()
 {
     if (_active && _hasTacho) _hw.updateTacho();
+}
+
+// ===========================================================================
+// Konsole
+// ===========================================================================
+
+namespace
+{
+    const char *faultName(Fan::Fault fault)
+    {
+        switch (fault)
+        {
+            case Fan::Fault::None: return "kein";
+            case Fan::Fault::EnableMissing: return "Freigabe fehlt";
+            case Fan::Fault::MasterTimeout: return "Master stumm";
+            case Fan::Fault::Config: return "Konfiguration";
+            case Fan::Fault::InvalidValue: return "ungueltiger Wert";
+            case Fan::Fault::NoRotation: return "keine Drehzahl";
+            case Fan::Fault::MonitoringSuspended: return "suspendiert";
+            case Fan::Fault::DewPointBlocked: return "Taupunkt sperrt";
+            case Fan::Fault::DewPointNoData: return "Taupunkt ohne Werte";
+        }
+        return "?";
+    }
+
+    const char *stateName(Fan::State state)
+    {
+        switch (state)
+        {
+            case Fan::State::Off: return "Aus";
+            case Fan::State::StartPulse: return "Anlaufpuls";
+            case Fan::State::Running: return "Lauf";
+            case Fan::State::DeadTime: return "Totzeit";
+        }
+        return "?";
+    }
+} // namespace
+
+void FanChannel::printStatusLine()
+{
+    const Fan::Fault fault = activeFault();
+    char rpmText[12];
+    if (_hasTacho)
+        snprintf(rpmText, sizeof(rpmText), "%u", (unsigned)_hw.rpm());
+    else
+        snprintf(rpmText, sizeof(rpmText), "-");
+
+    logInfoP("Ch%02u %-6s %-9s Soll=%-3u Ist=%-3u Stell=%-3u Ri=%c %-10s n=%-6s Fehler=%u%s",
+             (unsigned)(channelIndex() + 1),
+             _isMaster ? "Master" : "Slave",
+             _type == Fan::ChannelType::Reversible ? "revers." : "1-Richt.",
+             (unsigned)_powerSet,
+             (unsigned)_powerAct,
+             (unsigned)_driveAct,
+             _direction == Fan::Direction::B ? 'B' : 'A',
+             stateName(_state),
+             rpmText,
+             (unsigned)fault,
+             overrideActive() ? " [TEST]" : "");
+}
+
+void FanChannel::printDetail()
+{
+    const Fan::Fault fault = activeFault();
+
+    logInfoP("Kanal %u", (unsigned)(channelIndex() + 1));
+    logIndentUp();
+    logInfoP("Rolle:          %s", _isMaster ? "Master" : "Slave");
+    logInfoP("Typ:            %s", _type == Fan::ChannelType::Reversible ? "reversierbar" : "eine Richtung");
+    logInfoP("Sollwert:       %u %% (Gruppe)", (unsigned)_powerSet);
+    logInfoP("Leistung:       %u %%", (unsigned)_powerAct);
+    logInfoP("Stellgroesse:   %u %%", (unsigned)_driveAct);
+    logInfoP("Richtung:       %c%s", _direction == Fan::Direction::B ? 'B' : 'A',
+             _pendingDirection != _direction ? " (Wechsel steht an)" : "");
+    logInfoP("Zustand:        %s", stateName(_state));
+    logInfoP("Fehler:         %u (%s)", (unsigned)fault, faultName(fault));
+    logInfoP("Alarm-Bit:      %s", isAlarm(fault) ? "gesetzt" : "nicht gesetzt");
+
+    if (_hasTacho)
+        logInfoP("Drehzahl:       %u 1/min (%u Impulse)", (unsigned)_hw.rpm(), (unsigned)_hw.tachoPulses());
+    else
+        logInfoP("Drehzahl:       kein Tachoeingang");
+
+    logInfoP("Betriebsstunden %u h %u min", (unsigned)(_runSeconds / 3600), (unsigned)((_runSeconds % 3600) / 60));
+    logInfoP("Freigabe:       %s%s", _enableLatched ? "erteilt" : "GESPERRT",
+             _enableSeenEver ? "" : " (Objekt bisher nie empfangen)");
+    logInfoP("Suspendiert:    %s", _suspended ? "ja" : "nein");
+
+    if (_isMaster)
+    {
+        logInfoP("Takt:           %s", _tact ? "1" : "0");
+        if (_dewNoData)
+            logInfoP("Taupunkt:       keine brauchbaren Messwerte");
+        else if (_dewBlocking)
+            logInfoP("Taupunkt:       sperrt, Aussenluft ist die feuchtere");
+        else
+            logInfoP("Taupunkt:       frei");
+    }
+
+    if (overrideActive())
+    {
+        const uint32_t restMs = _testUntil - millis();
+        logInfoP("Testbetrieb:    Leistung=%s Richtung=%s, laeuft ab in %u s",
+                 _testPower >= 0 ? std::to_string(_testPower).c_str() : "Regelung",
+                 _testDirection >= 0 ? (_testDirection == 1 ? "B" : "A") : "Regelung",
+                 (unsigned)(restMs / 1000));
+    }
+    logIndentDown();
+}
+
+void FanChannel::setOverride(int16_t power, int8_t direction)
+{
+    if (power >= 0) _testPower = power > 100 ? 100 : power;
+    if (direction >= 0) _testDirection = direction;
+    _testUntil = millis() + Fan::ConsoleOverrideMs;
+
+    if (direction >= 0 && _type != Fan::ChannelType::Reversible)
+        logInfoP("Hinweis: Kanal ist nicht reversierbar, die Richtungsvorgabe bleibt ohne Wirkung");
+
+    logInfoP("Testbetrieb: Leistung=%s Richtung=%s fuer %u min",
+             _testPower >= 0 ? std::to_string(_testPower).c_str() : "Regelung",
+             _testDirection >= 0 ? (_testDirection == 1 ? "B" : "A") : "Regelung",
+             (unsigned)(Fan::ConsoleOverrideMs / 60000));
+}
+
+void FanChannel::releaseOverride()
+{
+    _testPower = -1;
+    _testDirection = -1;
+    _testUntil = 0;
 }

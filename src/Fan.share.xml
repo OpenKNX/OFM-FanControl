@@ -146,6 +146,24 @@
                 </TypeRestriction>
               </ParameterType>
 
+              <!-- Status-LEDs. Gleiche Id wie der Typ in Common.share.xml: der OpenKNXproducer
+                   fuehrt die Enumerationen zusammen, sodass unsere Kanaele zusaetzlich zu den
+                   Eintraegen von BASE in den Info-LED-Dropdowns erscheinen. Deshalb hier nur die
+                   eigenen Werte und op:headerExport="none" - der Typ selbst gehoert BASE.
+                   Die Werte muessen zu Fan::LedFunctionBase in FanTypes.h passen. -->
+              <ParameterType Id="%AID%_PT-SLEDFunc" Name="SLEDFunc" op:headerExport="none">
+                <TypeRestriction Base="Value" SizeInBit="16" UIHint="DropDown">
+                  <Enumeration Text="Lüfter 1" Value="110" Id="%ENID%" />
+                  <Enumeration Text="Lüfter 2" Value="111" Id="%ENID%" />
+                  <Enumeration Text="Lüfter 3" Value="112" Id="%ENID%" />
+                  <Enumeration Text="Lüfter 4" Value="113" Id="%ENID%" />
+                  <Enumeration Text="Lüfter 5" Value="114" Id="%ENID%" />
+                  <Enumeration Text="Lüfter 6" Value="115" Id="%ENID%" />
+                  <Enumeration Text="Lüfter 7" Value="116" Id="%ENID%" />
+                  <Enumeration Text="Lüfter 8" Value="117" Id="%ENID%" />
+                </TypeRestriction>
+              </ParameterType>
+
             </ParameterTypes>
             <Parameters>
               <Union SizeInBit="16">

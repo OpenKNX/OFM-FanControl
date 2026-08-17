@@ -37,6 +37,21 @@ class FanChannel : public OpenKNX::Channel
     /** true, wenn dieser Luefter laut geraeteweitem Zaehler "Anzahl Luefter" existiert. */
     bool isActive() const { return _active; }
 
+    // --- Konsole ---
+    /** Eine Zeile fuer die Uebersichtstabelle von "fan st". */
+    void printStatusLine();
+    /** Ausfuehrliche Einzelausgabe fuer "fan cNN". */
+    void printDetail();
+    /**
+     * Testuebersteuerung setzen. power < 0 laesst die Leistung unangetastet, direction < 0 die
+     * Richtung. Die Uebersteuerung ersetzt die Sollwertbildung, nicht die Vetos: Freigabe,
+     * Master-Ueberwachung und Taupunktwaechter greifen weiter.
+     */
+    void setOverride(int16_t power, int8_t direction);
+    /** Uebersteuerung beenden. Ohne aktive Uebersteuerung ein No-op. */
+    void releaseOverride();
+    bool overrideActive() const { return _testPower >= 0 || _testDirection >= 0; }
+
     PersistentState persistentState() const;
     void restore(const PersistentState &state);
 
@@ -70,6 +85,16 @@ class FanChannel : public OpenKNX::Channel
     Fan::Direction desiredDirection() const;
     int32_t rpmToFlow(uint16_t rpm) const;
     Fan::Fault activeFault() const;
+
+    /**
+     * true, wenn der Fehler als Alarm gilt. Ein sperrender Taupunktwaechter und eine ausgesetzte
+     * Ueberwachung sind bestimmungsgemaesser Betrieb, kein Defekt. Eine Definition fuer das
+     * Alarm-KO und die Status-LED, damit beide nicht auseinanderlaufen.
+     */
+    static bool isAlarm(Fan::Fault fault);
+
+    /** Status-LED nachfuehren, sofern der Benutzer diesem Kanal in der ETS eine zugewiesen hat. */
+    void updateStatusLed();
 
     // --- Senden mit Totband und Mindestabstand ---
     bool passesDeadband(int32_t value, int32_t lastSent, uint8_t percentBand, uint16_t absBand) const;
@@ -109,6 +134,11 @@ class FanChannel : public OpenKNX::Channel
     bool _invalidValue = false;
     bool _masterTimeout = false;
     bool _persistDirty = false;
+
+    // --- Testuebersteuerung ueber die Konsole, verfaellt nach Fan::ConsoleOverrideMs ---
+    int16_t _testPower = -1;    // <0 = Leistung nicht uebersteuert
+    int8_t _testDirection = -1; // <0 = Richtung nicht uebersteuert
+    uint32_t _testUntil = 0;
 
     // Zeitmarken
     uint32_t _stateSince = 0;
