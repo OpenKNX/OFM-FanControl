@@ -4,7 +4,7 @@
 #include "FanTypes.h"
 
 /**
- * @brief Ansteuerung eines Luefterknotens, entkoppelt von der konkreten Hardware.
+ * @brief Ansteuerung eines Luefterknotens, entkoppelt vom Ansteuerverfahren.
  *
  * Die unterstuetzten Luefter (Maico PPB30, Fawas HST) tragen Drehzahl UND Foerderrichtung
  * auf **einem** Ansteuerpfad: die Mittelstellung ist Stillstand, das eine Ende volle Leistung
@@ -14,6 +14,16 @@
  *
  * Daraus folgt die wichtigste Eigenschaft dieser Schnittstelle: **0 % Stellgroesse ist nicht
  * "aus", sondern volle Leistung Richtung A.** Der sichere Zustand ist die Mittelstellung.
+ *
+ * Diese Schnittstelle beschreibt **was** angesteuert wird, nicht **wie**. Sie kennt deshalb
+ * bewusst keine Pins, keine Frequenzen und kein Protokoll: eine Implementierung bringt ihre
+ * eigene Konfiguration im Konstruktor mit, weil ein PWM-Ausgang Pins braucht, ein digitaler
+ * Regler dagegen eine Schnittstelle und eine Adresse. Angelegt werden die Objekte vom
+ * Geraete-Header ueber FAN_INIT(), so wie OGM-Common es mit LED_INIT() haelt.
+ *
+ * Vorhandene Implementierungen: PwmFan (Stellgroesse als Tastverhaeltnis, Drehzahl ueber einen
+ * getrennten Tacho-Eingang), DShotFan (bidirektionales DShot, Stellgroesse und Drehzahl auf
+ * derselben Leitung).
  */
 class IFanHardware
 {
@@ -21,39 +31,14 @@ class IFanHardware
     virtual ~IFanHardware() = default;
 
     /**
-     * @brief Pins zuordnen und die Ausgaenge in den sicheren Zustand bringen.
+     * @brief Ausgaenge in den sicheren Zustand bringen. Wird einmalig im Setup aufgerufen.
      *
-     * @param pinDrive       Ansteuerpfad, traegt Drehzahl und Richtung
-     * @param pinDriveMirror zweiter Ausgang mit **identischem** Signal, < 0 wenn nicht vorhanden
-     * @param pinSwitch      Lastschalter, < 0 wenn nicht vorhanden
-     *
-     * Der Spiegel-Ausgang ist keine zweite Richtung, sondern dieselbe Ansteuerung ein zweites
-     * Mal: das MrSpieb-Board fuehrt je Knoten zwei Ausgaenge heraus, einen je Luefter eines
-     * Maico-Paares. Beide Luefter eines Geraetes drehen ohnehin immer gleich herum. Boards mit
-     * nur einem Ausgang (Reg1 Fan-Addon-X2) klemmen beide Luefter auf dieselbe Klemme, was der
-     * hochohmige PWM-Eingang der Luefter erlaubt.
+     * Pins und Protokollparameter kennt die Implementierung bereits aus ihrem Konstruktor;
+     * hier wird nur noch scharf geschaltet.
      */
-    virtual void init(int8_t pinDrive, int8_t pinDriveMirror, int8_t pinSwitch, int8_t pinTacho) = 0;
+    virtual void begin() = 0;
 
-    /** @brief true, wenn dieses Board fuer diesen Knoten einen Tacho-Eingang hat. */
-    virtual bool hasTacho() const = 0;
-
-    /**
-     * @brief Tacho-Eingang scharf schalten. Aus dem Kontext aufrufen, der messen soll.
-     *
-     * Getrennt von init(), weil der Interrupt auf dem Core landet, der ihn registriert -
-     * die Messung laeuft auf Core 1, die Ansteuerung auf Core 0.
-     */
-    virtual void beginTacho() = 0;
-
-    /** @brief Messung fortschreiben. Aus demselben Kontext wie beginTacho(). */
-    virtual void updateTacho() = 0;
-
-    /** @brief Letzte gemessene Drehzahl. Aus einem anderen Core lesbar. */
-    virtual uint16_t rpm() const = 0;
-
-    /** @brief Monotoner Pulszaehler fuer die Blockiererkennung. */
-    virtual uint32_t tachoPulses() const = 0;
+    // --- Ansteuerung ---
 
     /**
      * @brief Mittelstellung setzen (Stellgroesse bei Stillstand).
@@ -71,4 +56,37 @@ class IFanHardware
 
     /** @brief Sicherer Zustand: Mittelstellung ausgeben und den Lastschalter oeffnen. */
     virtual void stop() = 0;
+
+    // --- Drehzahlrueckmeldung ---
+    //
+    // Bewusst nicht "Tacho" genannt: woher die Drehzahl kommt, ist Sache der Implementierung.
+    // PwmFan zaehlt Impulse an einem eigenen Eingang, DShotFan liest sie als Telemetrie auf
+    // derselben Leitung zurueck, ueber die es ansteuert.
+
+    /** @brief true, wenn dieser Knoten eine Drehzahl melden kann. */
+    virtual bool hasSpeedFeedback() const = 0;
+
+    /**
+     * @brief Messung scharf schalten. Aus dem Kontext aufrufen, der auch messen soll.
+     *
+     * Getrennt von begin(), weil eine interruptbasierte Messung auf dem Core landet, der sie
+     * registriert: die Messung laeuft auf Core 1, die Ansteuerung auf Core 0.
+     */
+    virtual void beginSpeedFeedback() = 0;
+
+    /** @brief Messung fortschreiben. Aus demselben Kontext wie beginSpeedFeedback(). */
+    virtual void updateSpeedFeedback() = 0;
+
+    /** @brief Letzte gemessene Drehzahl. Aus einem anderen Core lesbar. */
+    virtual uint16_t rpm() const = 0;
+
+    /**
+     * @brief Monoton steigender Zaehler fuer die Blockiererkennung.
+     *
+     * Er muss zunehmen, solange sich der Rotor dreht, und stehen bleiben, wenn nicht. Ob dahinter
+     * Tacho-Impulse oder empfangene Telemetriewerte stecken, ist unerheblich - die
+     * Blockiererkennung wertet nur die Zunahme aus. Niemals zuruecksetzen: die Erkennung
+     * vergleicht Zaehlerstaende zweier Zeitfenster, und ein Ruecksprung sieht wie Stillstand aus.
+     */
+    virtual uint32_t speedPulses() const = 0;
 };

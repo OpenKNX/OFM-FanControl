@@ -1,6 +1,6 @@
-#include "TachoReader.h"
+#include "PWMFanTachoReader.h"
 
-void TachoReader::begin(uint8_t pin, uint8_t pulsesPerRev)
+void PWMFanTachoReader::begin(uint8_t pin, uint8_t pulsesPerRev)
 {
     _pin = pin;
     _pulsesPerRev = pulsesPerRev > 0 ? pulsesPerRev : 1;
@@ -15,7 +15,7 @@ void TachoReader::begin(uint8_t pin, uint8_t pulsesPerRev)
     _lastCount = _pulseCount;
 }
 
-void TachoReader::update()
+void PWMFanTachoReader::update()
 {
     const uint32_t now = millis();
     const uint32_t elapsed = now - _lastTime;
@@ -34,7 +34,7 @@ void TachoReader::update()
     _lastTime = now;
 }
 
-void TachoReader::onPulse(void *self)
+void PWMFanTachoReader::onPulse(void *self)
 {
-    static_cast<TachoReader *>(self)->_pulseCount++;
+    static_cast<PWMFanTachoReader *>(self)->_pulseCount++;
 }

@@ -1,24 +1,32 @@
-#include "RP2040FanHardware.h"
+#include "PwmFan.h"
 #include <Arduino.h>
+
+// Nur fuer die Startmeldung: der Logger haengt an der Facade. Bewusst hier und nicht im Header,
+// damit die Schnittstelle des Ansteuerverfahrens leicht bleibt.
+#include "OpenKNX.h"
 #include "hardware.h"
 
-void RP2040FanHardware::configurePwm(uint32_t freqHz)
+void PwmFan::configureShared(uint32_t freqHz)
 {
-    // Global fuer den Core, deshalb nur einmal aus FanModule::setup() aufrufen.
+    // Global fuer den Core, deshalb nur einmal aus FAN_INIT() des Geraete-Headers aufrufen.
     if (freqHz < 500) freqHz = 500;
     if (freqHz > 20000) freqHz = 20000;
 
     analogWriteFreq(freqHz);
     analogWriteRange(PwmRange);
+
+    // Die Polaritaet ist eine Board-Eigenschaft und stellt bei diesen Luftern die Foerderrichtung
+    // auf den Kopf, wenn sie falsch ist. Deshalb beim Start protokollieren - hier und nicht je
+    // Kanal, damit die Zeile einmal erscheint und nicht je Ausgang.
+#ifdef FAN_PWM_ACTIVE_LOW
+    logInfo("PwmFan", "Ausgang invertiert (Open-Drain mit Pullup), %u Hz", (unsigned)freqHz);
+#else
+    logInfo("PwmFan", "Ausgang nicht invertiert, %u Hz", (unsigned)freqHz);
+#endif
 }
 
-void RP2040FanHardware::init(int8_t pinDrive, int8_t pinDriveMirror, int8_t pinSwitch, int8_t pinTacho)
+void PwmFan::begin()
 {
-    _pinDrive = pinDrive;
-    _pinDriveMirror = pinDriveMirror;
-    _pinSwitch = pinSwitch;
-    _pinTacho = pinTacho;
-
     if (_pinDrive >= 0) pinMode(_pinDrive, OUTPUT);
     if (_pinDriveMirror >= 0) pinMode(_pinDriveMirror, OUTPUT);
     if (_pinSwitch >= 0) pinMode(_pinSwitch, OUTPUT);
@@ -26,13 +34,13 @@ void RP2040FanHardware::init(int8_t pinDrive, int8_t pinDriveMirror, int8_t pinS
     stop();
 }
 
-void RP2040FanHardware::beginTacho()
+void PwmFan::beginSpeedFeedback()
 {
-    // Der Interrupt landet auf dem Core, der ihn registriert - deshalb nicht in init().
+    // Der Interrupt landet auf dem Core, der ihn registriert - deshalb nicht in begin().
     if (_pinTacho >= 0) _tacho.begin((uint8_t)_pinTacho);
 }
 
-void RP2040FanHardware::writeDuty(uint8_t dutyPercent)
+void PwmFan::writeDuty(uint8_t dutyPercent)
 {
     if (dutyPercent > 100) dutyPercent = 100;
 
@@ -52,7 +60,7 @@ void RP2040FanHardware::writeDuty(uint8_t dutyPercent)
     if (_pinDriveMirror >= 0) analogWrite(_pinDriveMirror, duty);
 }
 
-void RP2040FanHardware::drive(Fan::Direction dir, uint8_t speedPercent)
+void PwmFan::drive(Fan::Direction dir, uint8_t speedPercent)
 {
     if (speedPercent == 0)
     {
@@ -79,7 +87,7 @@ void RP2040FanHardware::drive(Fan::Direction dir, uint8_t speedPercent)
     if (_pinSwitch >= 0) digitalWrite(_pinSwitch, HIGH);
 }
 
-void RP2040FanHardware::stop()
+void PwmFan::stop()
 {
     // Sicherer Zustand ist die Mittelstellung, nicht 0 %.
     writeDuty(_midpoint);

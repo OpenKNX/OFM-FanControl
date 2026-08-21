@@ -50,8 +50,10 @@ openknx.addModule(1, openknxFanModule);
 ```
 
 The module needs 32 KO numbers per channel and 80 bytes of parameter memory per channel. The
-hardware layer is behind `IFanHardware`; `RP2040FanHardware` is the implementation for the
-RP2040 and reads its pin assignment plus PWM polarity from the application's `DEVICE_*` header.
+hardware layer is behind `IFanHardware`, which describes *what* is driven, not *how*: it knows
+no pins, no frequencies and no protocol. The device header constructs the implementations in a
+`FAN_INIT()` macro — the same pattern OGM-Common uses for `LED_INIT()` — so adding a drive method
+touches neither the module nor the channel logic.
 
 ## Structure
 
@@ -60,9 +62,10 @@ RP2040 and reads its pin assignment plus PWM polarity from the application's `DE
 | `FanModule.*` | module, channel container, flash persistence |
 | `FanChannel.*` | one node: state machine, setpoint, monitoring, feedback |
 | `FanTypes.h` | enums and timing constants |
-| `IFanHardware.h` | hardware abstraction |
-| `RP2040FanHardware.*` | RP2040 implementation, bipolar mapping, mirrored output |
-| `TachoReader.*` | speed measurement and pulse counter for blockage detection |
+| `IFanHardware.h` | drive abstraction: drive/stop/midpoint plus speed feedback |
+| `FanHardware/PwmFan.*` | drive by duty cycle, bipolar mapping, mirrored output, tacho input |
+| `FanHardware/DShotFan.*` | bidirectional DShot over the RP2040 PIO block — reference implementation, no board uses it |
+| `FanHardware/PWMFanTachoReader.*` | helper of `PwmFan`: pulse counting and rpm for the tacho input |
 | `Fan.share.xml` | module-wide ETS definition |
 | `Fan.templ.xml` | per-channel ETS definition |
 

@@ -687,7 +687,7 @@ void FanChannel::applyOutput()
     {
         if ((now - _blockWindowStart) >= Fan::BlockWindowMs)
         {
-            if (_hw.tachoPulses() == _blockWindowPulses)
+            if (_hw.speedPulses() == _blockWindowPulses)
             {
                 if (_emptyWindows < 0xFF) _emptyWindows++;
                 if (_emptyWindows >= Fan::BlockWindowsToFault && !_blocked)
@@ -701,13 +701,13 @@ void FanChannel::applyOutput()
                 _emptyWindows = 0;
             }
             _blockWindowStart = now;
-            _blockWindowPulses = _hw.tachoPulses();
+            _blockWindowPulses = _hw.speedPulses();
         }
     }
     else
     {
         _blockWindowStart = now;
-        _blockWindowPulses = _hw.tachoPulses();
+        _blockWindowPulses = _hw.speedPulses();
         _emptyWindows = 0;
     }
 
@@ -922,13 +922,15 @@ void FanChannel::loop()
 void FanChannel::setup1()
 {
     // Der Interrupt landet auf dem Core, der ihn registriert - deshalb hier und nicht in
-    // setup(). Ohne Rueckmeldung im ETS-Parameter bleibt der Eingang unangetastet.
-    if (_active && _hasTacho) _hw.beginTacho();
+    // setup(). Unabhaengig vom ETS-Parameter: ob es etwas zu tun gibt, entscheidet die Ansteuerung.
+    // Ein PWM-Luefter ohne Tacho-Pin tut hier nichts, eine DShot-Ansteuerung braucht den Tick
+    // dagegen zwingend - ohne zyklischen Rahmen stellt der Regler ab.
+    if (_active) _hw.beginSpeedFeedback();
 }
 
 void FanChannel::loop1()
 {
-    if (_active && _hasTacho) _hw.updateTacho();
+    if (_active) _hw.updateSpeedFeedback();
 }
 
 // ===========================================================================
@@ -1008,7 +1010,7 @@ void FanChannel::printDetail()
     logInfoP("Alarm-Bit:      %s", isAlarm(fault) ? "gesetzt" : "nicht gesetzt");
 
     if (_hasTacho)
-        logInfoP("Drehzahl:       %u 1/min (%u Impulse)", (unsigned)_hw.rpm(), (unsigned)_hw.tachoPulses());
+        logInfoP("Drehzahl:       %u 1/min (%u Impulse)", (unsigned)_hw.rpm(), (unsigned)_hw.speedPulses());
     else
         logInfoP("Drehzahl:       kein Tachoeingang");
 

@@ -13,7 +13,7 @@
  * Es gibt bewusst keine statische Instanztabelle: der Interrupt wird mit `this` als Parameter
  * registriert, deshalb ist die Anzahl der Instanzen nicht begrenzt.
  */
-class TachoReader
+class PWMFanTachoReader
 {
   public:
     void begin(uint8_t pin, uint8_t pulsesPerRev = 2);

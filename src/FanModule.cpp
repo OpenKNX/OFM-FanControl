@@ -1,56 +1,61 @@
 #include "FanModule.h"
 
+// Die konkreten Ansteuerverfahren. Eingebunden werden sie hier, damit FAN_INIT() aus dem
+// Geraete-Header sie benutzen kann, ohne dass ein Hardware-Header Modulheader einbinden muss -
+// ein Makro wird erst an der Aufrufstelle aufgeloest.
+#include "FanHardware/PwmFan.h"
+#include "FanHardware/DShotFan.h"
+
 FanModule openknxFanModule;
 
-#ifndef FAN_BOARD_PIN_TABLE
-    #error "Das Geraete-Header muss FAN_BOARD_CHANNELS und FAN_BOARD_PIN_TABLE definieren."
+#ifndef FAN_INIT
+    #error "Das Geraete-Header muss FAN_BOARD_CHANNELS und FAN_INIT() definieren."
 #endif
 
 namespace
 {
-    struct BoardPins
-    {
-        int8_t drive;
-        int8_t driveMirror;
-        int8_t sw;
-        int8_t tacho;
-    };
-
-    // Die Pinbelegung ist eine Eigenschaft des Boards und kommt deshalb aus dem
-    // Geraete-Header, nicht aus diesem Modul. Der Ansteuerpfad traegt Drehzahl und Richtung
-    // gemeinsam; der Spiegel-Ausgang fuehrt dasselbe Signal ein zweites Mal heraus, fuer den
-    // zweiten Luefter eines Maico-Paares. Boards mit nur einem Ausgang geben -1 an.
-    const BoardPins boardPins[] = FAN_BOARD_PIN_TABLE;
-
-    constexpr uint8_t BoardChannels = (uint8_t)(sizeof(boardPins) / sizeof(boardPins[0]));
-
-    static_assert(BoardChannels == FAN_BOARD_CHANNELS,
-                  "FAN_BOARD_CHANNELS passt nicht zur Laenge von FAN_BOARD_PIN_TABLE.");
+    // Wie viele Ausgaenge dieses Board hat. Eine Board-Eigenschaft, keine der Applikation:
+    // die ETS bietet FAN_ChannelCount Kanaele an, Pins hat nur ein Teil davon.
+    constexpr uint8_t BoardChannels = FAN_BOARD_CHANNELS;
 }
 
 // ===========================================================================
 // Setup
 // ===========================================================================
 
+void FanModule::addHardware(IFanHardware *hardware)
+{
+    if (hardware == nullptr) return;
+
+    // Mehr Ansteuerungen als deklarierte Ausgaenge waere ein Fehler im Geraete-Header. Das
+    // ueberzaehlige Objekt wird verworfen statt ueber das Array hinaus geschrieben - der
+    // Vergleich in setup() meldet die Abweichung.
+    if (_hwCount >= BoardChannels)
+    {
+        logErrorP("FAN_INIT() meldet mehr als die deklarierten %u Ausgaenge an",
+                  (unsigned)BoardChannels);
+        delete hardware;
+        return;
+    }
+
+    _hw[_hwCount++] = hardware;
+}
+
 void FanModule::setup(bool configured)
 {
-    // Geraeteweit: die PWM-Frequenz ist auf dem RP2040 keine Eigenschaft des einzelnen Pins.
-    // Ohne gueltige Konfiguration ein unauffaelliger Vorgabewert.
-    RP2040FanHardware::configurePwm(configured ? ParamFAN_PwmFreq : 1000);
+    // Das Board legt seine Ansteuerungen selbst an - nur es weiss, ob ein Ausgang ein
+    // Tastverhaeltnis ausgibt oder ein Protokoll spricht, und mit welchen Pins. Dasselbe Muster
+    // benutzt OGM-Common mit LED_INIT(); das Modul kennt danach nur noch IFanHardware.
+    FAN_INIT();
 
-    // Die Polaritaet ist eine Board-Eigenschaft und stellt bei diesen Luftern die
-    // Foerderrichtung auf den Kopf, wenn sie falsch ist. Deshalb beim Start protokollieren.
-#ifdef FAN_PWM_ACTIVE_LOW
-    logInfoP("PWM-Ausgang invertiert (Open-Drain mit Pullup)");
-#else
-    logInfoP("PWM-Ausgang nicht invertiert");
-#endif
+    if (_hwCount != BoardChannels)
+        logErrorP("FAN_INIT() hat %u Ansteuerungen angemeldet, das Board deklariert %u",
+                  (unsigned)_hwCount, (unsigned)BoardChannels);
 
-    // Die Hardware wird fuer alle vorhandenen Ausgaenge zugeordnet, damit sie auch bei einem
-    // ungenutzten Kanal definiert in der Mittelstellung stehen.
-    for (uint8_t i = 0; i < BoardChannels; i++)
-        _hw[i].init(boardPins[i].drive, boardPins[i].driveMirror, boardPins[i].sw,
-                    boardPins[i].tacho);
+    // Auch ungenutzte Ausgaenge scharf schalten, damit sie definiert in der Mittelstellung
+    // stehen und nicht undefiniert floaten.
+    for (uint8_t i = 0; i < _hwCount; i++)
+        _hw[i]->begin();
 
     if (!configured)
     {
@@ -74,7 +79,7 @@ void FanModule::setup(bool configured)
 
     for (uint8_t i = 0; i < BoardChannels; i++)
     {
-        FanChannel *channel = new FanChannel(i, _hw[i]);
+        FanChannel *channel = new FanChannel(i, *_hw[i]);
         channel->setup();
 
         if (!channel->isActive())
